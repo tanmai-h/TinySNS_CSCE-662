@@ -213,16 +213,10 @@ class SNSServiceImpl final : public SNSService::Service {
       	  c->stream = stream;
         std::string line;
         std::vector<std::string> newest_twenty;
-        std::ifstream in(username+".txt");
+        std::ifstream in(username+"following.txt");
         int count = 0;
         //Read the last up-to-20 lines (newest 20 messages) from userfollowing.txt
         while(getline(in, line)){
-//          count++;
-//          if(c->following_file_size > 20){
-//	    if(count < c->following_file_size-20){
-//	      continue;
-//            }
-//          }
           newest_twenty.push_back(line);
         }
         Message new_msg; 
@@ -294,7 +288,7 @@ void sendHeartbeatThread(HeartbeatClient& client) {
    try {
       while (true) {
           client.SendHeartbeat();
-          std::this_thread::sleep_for(std::chrono::seconds(1));  // Adjust the interval as needed.
+          std::this_thread::sleep_for(std::chrono::seconds(3));  // Adjust the interval as needed.
       }
    } catch(const std::exception &e) {
     log(ERROR, " exception in sending heartbeat= " + std::string(e.what()));
