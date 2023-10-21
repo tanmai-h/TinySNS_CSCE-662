@@ -19,3 +19,10 @@ To run coordinator, server, client (Run them on different terminals)
 ./tsc -h localhost -k 9090 -u 1
 ./tsc -h localhost -k 9090 -u 2
 ```
+### Using the startup script
+```bash
+    bash tsn-service_start.sh
+    // Now on separate terminals start the client
+    ./tsc -h localhost -k 9090 -u 1
+    ./tsc -h localhost -k 9090 -u 2
+```
