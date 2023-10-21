@@ -213,7 +213,7 @@ class SNSServiceImpl final : public SNSService::Service {
       	  c->stream = stream;
         std::string line;
         std::vector<std::string> newest_twenty;
-        std::ifstream in(username+"following.txt");
+        std::ifstream in(username+".txt");
         int count = 0;
         //Read the last up-to-20 lines (newest 20 messages) from userfollowing.txt
         while(getline(in, line)){
@@ -227,7 +227,7 @@ class SNSServiceImpl final : public SNSService::Service {
         }
         Message new_msg; 
  	//Send the newest messages to the client to be displayed
- 	if(newest_twenty.size() >= 40){ 	
+ 	      if(newest_twenty.size() >= 40){ 	
 	    for(int i = newest_twenty.size()-40; i<newest_twenty.size(); i+=2){
 	       new_msg.set_msg(newest_twenty[i]);
 	       stream->Write(new_msg);

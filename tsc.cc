@@ -97,65 +97,13 @@ int Client::connectTo() {
 
 IReply Client::processCommand(std::string& input)
 {
-  // ------------------------------------------------------------
-  // GUIDE 1:
-  // In this function, you are supposed to parse the given input
-  // command and create your own message so that you call an 
-  // appropriate service method. The input command will be one
-  // of the followings:
-  //
-  // FOLLOW <username>
-  // UNFOLLOW <username>
-  // LIST
-  // TIMELINE
-  //
-  // - JOIN/LEAVE and "<username>" are separated by one space.
-  // ------------------------------------------------------------
-  
-  // ------------------------------------------------------------
-  // GUIDE 2:
-  // Then, you should create a variable of IReply structure
-  // provided by the client.h and initialize it according to
-  // the result. Finally you can finish this function by returning
-  // the IReply.
-  // ------------------------------------------------------------
-  
-  
-  // ------------------------------------------------------------
-  // HINT: How to set the IReply?
-  // Suppose you have "Join" service method for JOIN command,
-  // IReply can be set as follow:
-  // 
-  //     // some codes for creating/initializing parameters for
-  //     // service method
-  //     IReply ire;
-  //     grpc::Status status = stub_->Join(&context, /* some parameters */);
-  //     ire.grpc_status = status;
-  //     if (status.ok()) {
-  //         ire.comm_status = SUCCESS;
-  //     } else {
-  //         ire.comm_status = FAILURE_NOT_EXISTS;
-  //     }
-  //      
-  //      return ire;
-  // 
-  // IMPORTANT: 
-  // For the command "LIST", you should set both "all_users" and 
-  // "following_users" member variable of IReply.
-  // ------------------------------------------------------------
 
   IReply ire;
   std::size_t index = input.find_first_of(" ");
   std::cout << "Processing "+input + ". ";
   if (index != std::string::npos) {
     std::string cmd = input.substr(0, index);
-    
-    /*
-      if (input.length() == index + 1) {
-      std::cout << "Invalid Input -- No Arguments Given\n";
-      }
-    */
-    
+        
     std::string argument = input.substr(index+1, (input.length()-index));
     
     if (cmd == "FOLLOW") {
@@ -198,9 +146,6 @@ void Client::processTimeline()
 
 }
 
-///////////////////////////////////////////
-// List Command
-//////////////////////////////////////////
 IReply Client::List() {
     //Data being sent to the server
     Request request;
