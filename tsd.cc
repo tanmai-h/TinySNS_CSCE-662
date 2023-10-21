@@ -275,6 +275,7 @@ public:
           log(ERROR, "Could not get the correct reply for Heartbeat from Coordinator");
           exit(-1);
       }
+      log(INFO, " Got confirmation from cooridinator");
   }
 
   private:
@@ -288,7 +289,7 @@ void sendHeartbeatThread(HeartbeatClient& client) {
    try {
       while (true) {
           client.SendHeartbeat();
-          std::this_thread::sleep_for(std::chrono::seconds(3));  // Adjust the interval as needed.
+          std::this_thread::sleep_for(std::chrono::seconds(1));  // Adjust the interval as needed.
       }
    } catch(const std::exception &e) {
     log(ERROR, " exception in sending heartbeat= " + std::string(e.what()));

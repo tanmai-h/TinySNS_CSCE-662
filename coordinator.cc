@@ -75,7 +75,7 @@ class CoordServiceImpl final : public CoordService::Service {
       int cid = atoi(serverInfo->clusterid().c_str());
       if (routingTable.find(cid) == routingTable.end()) {
         confirmation->set_status(false);
-        log(INFO, "Invalid cid: " + std::to_string(cid));
+        log(ERROR, "Invalid cid: " + std::to_string(cid));
         return grpc::Status(grpc::StatusCode::NOT_FOUND, std::string("Cluster ID: ") + std::to_string(serverInfo->serverid()) + std::string(" not found"));
       }
       zNode &znode = routingTable[cid][0];
@@ -88,7 +88,7 @@ class CoordServiceImpl final : public CoordService::Service {
       log(INFO, "Got Heartbeat from clusterId, serverId: " + std::string(serverInfo->clusterid()) + std::string(",") + std::to_string(serverInfo->serverid()));
       confirmation->set_status(true);
 
-    return Status::OK;
+      return Status::OK;
   }
   
   Status GetServer(ServerContext* context, const ID* id, ServerInfo* serverInfo) override {
@@ -135,7 +135,7 @@ void RunServer(std::string port_no){
   routingTable[2] = s2;
   routingTable[3] = s3;
   std::unique_ptr<Server> server(builder.BuildAndStart());
-  std::cout << "Server listening on " << server_address << std::endl;
+  std::cout << "Coordinator listening on " << server_address << std::endl;
 
   // Wait for the server to shutdown. Note that some other thread must be
   // responsible for shutting down the server for this call to ever return.
@@ -155,6 +155,9 @@ int main(int argc, char** argv) {
 	std::cerr << "Invalid Command Line Argument\n";
     }
   }
+  std::string log_file_name = std::string("coordinator-port-") + port;  
+  google::InitGoogleLogging(log_file_name.c_str());
+
   RunServer(port);
   return 0;
 }
