@@ -1,4 +1,6 @@
-
+### MP2.1 CSCE 662 Texas A&M
+#### Name: Tanmai Harish
+#### UIN:  434007349
 Compile the code using the provided makefile:
 
     make
