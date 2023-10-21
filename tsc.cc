@@ -76,7 +76,7 @@ int Client::connectTo() {
     ClientContext clientContext;
     ServerInfo serverInfo;
     ID id;
-    // id.set_id(atoi(uid.c_str()));
+    id.set_id(atoi(uid.c_str()));
     grpc::Status grpcStatus = coordStub->GetServer(&clientContext,id,&serverInfo);
     if (!grpcStatus.ok()) {
       return -1;
@@ -356,7 +356,7 @@ int main(int argc, char** argv) {
 
   std::cout << "Logging Initialized. Client starting...";
   
-  Client myc(cip, cport, cport);
+  Client myc(cip, uid, cport);
 
   myc.run();
   

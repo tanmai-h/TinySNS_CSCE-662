@@ -264,57 +264,41 @@ class SNSServiceImpl final : public SNSService::Service {
 
 };
 
-// void sendHeartbeat(ServerInfo serverInfo, std::string coordLoginInfo) {
-//     try {
-//         channel = std::shared_ptr<CoordService::Stub>(grpc::CreateChannel(serverAddress_, grpc::InsecureChannelCredentials()));
-//         std::unique_ptr<CoordService::Stub> coordStub = CoordService::NewStub(channel);
-
-//         while (true) {
-//             ClientContext clientContext;
-//             Confirmation confirmation;
-//             grpc::Status grpcStatus = coordStub->Heartbeat(&clientContext, serverInfo, &confirmation);
-//             if (!grpcStatus.ok() || !confirmation.status()) {
-//                 log(ERROR, "Could not get the correct reply for Heartbeat from Coordinator");
-//                 exit(-1);
-//             }
-//             sleep(1);
-//         }
-//     } catch (const std::exception& e) {
-//         std::cout << "error= " << std::string(e.what());
-//         log(ERROR, "Exception in sendHeartbeat: " + std::string(e.what()));
-//     }
-// }
-
 class HeartbeatClient {
 public:
-    HeartbeatClient(const std::string& serverAddress, ServerInfo &serverInfo)
-        : serverAddress_(serverAddress), serverInfo_(serverInfo){
-        channel_ = grpc::CreateChannel(serverAddress_, grpc::InsecureChannelCredentials());
-        stub_ = CoordService::NewStub(channel_);
-    }
+  HeartbeatClient() {}
+  HeartbeatClient(const std::string& serverAddress, ServerInfo &serverInfo)
+      : serverAddress_(serverAddress), serverInfo_(serverInfo){
+      channel_ = grpc::CreateChannel(serverAddress_, grpc::InsecureChannelCredentials());
+      stub_ = CoordService::NewStub(channel_);
+  }
 
-    void SendHeartbeat() {
-        grpc::ClientContext clientContext;
-        Confirmation confirmation;
-        grpc::Status grpcStatus = stub_->Heartbeat(&clientContext, serverInfo_, &confirmation);
-        if (!grpcStatus.ok() || !confirmation.status()) {
-            log(ERROR, "Could not get the correct reply for Heartbeat from Coordinator");
-            exit(-1);
-        }
-    }
+  void SendHeartbeat() {
+      grpc::ClientContext clientContext;
+      Confirmation confirmation;
+      grpc::Status grpcStatus = stub_->Heartbeat(&clientContext, serverInfo_, &confirmation);
+      if (!grpcStatus.ok() || !confirmation.status()) {
+          log(ERROR, "Could not get the correct reply for Heartbeat from Coordinator");
+          exit(-1);
+      }
+  }
 
-private:
-    std::string serverAddress_;
-    ServerInfo serverInfo_;
-    std::shared_ptr<grpc::Channel> channel_;
-    std::unique_ptr<CoordService::Stub> stub_;
+  private:
+      std::string serverAddress_;
+      ServerInfo serverInfo_;
+      std::shared_ptr<grpc::Channel> channel_;
+      std::unique_ptr<CoordService::Stub> stub_;
 };
 
 void sendHeartbeatThread(HeartbeatClient& client) {
-    while (true) {
-        client.SendHeartbeat();
-        std::this_thread::sleep_for(std::chrono::seconds(1));  // Adjust the interval as needed.
-    }
+   try {
+      while (true) {
+          client.SendHeartbeat();
+          std::this_thread::sleep_for(std::chrono::seconds(1));  // Adjust the interval as needed.
+      }
+   } catch(const std::exception &e) {
+    log(ERROR, " exception in sending heartbeat= " + std::string(e.what()));
+   }
 }
 
 class ServerProvider {
@@ -329,16 +313,21 @@ public:
         RunServer();
     }
 
+
+    ~ServerProvider() {
+      if(ht.joinable())
+          ht.join();
+    }
 private:
     std::string port;
     std::string clusterId;
     std::string serverId;
     std::string coordinatorIP;
     std::string coordinatorPort;
-    std::string portNum;
     ServerInfo serverInfo;
     HeartbeatClient hc;
-
+    std::thread ht;
+  
     int connectToCoordinator() {
       try {
         serverInfo.set_serverid(std::stoi(serverId));
@@ -348,7 +337,7 @@ private:
         serverInfo.set_clusterid(clusterId);
         std::string coordLoginInfo = coordinatorIP + ":" + coordinatorPort;
         hc = HeartbeatClient(coordLoginInfo, serverInfo);
-        std::thread hb(sendHeartbeatThread, std::ref(hc));
+        ht = std::thread(sendHeartbeatThread, std::ref(hc));
         return 0;
       } catch (const std::exception& e) {
           log(ERROR, "Exception in connectToCoordinator: " + std::string(e.what()));
@@ -358,7 +347,7 @@ private:
 
     void RunServer() {
         std::thread();
-        std::string server_address = "localhost:" + portNum;
+        std::string server_address = "127.0.0.1:" + port;
         SNSServiceImpl service;
         ServerBuilder builder;
         builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());

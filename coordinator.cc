@@ -72,14 +72,13 @@ bool zNode::isActive(){
 class CoordServiceImpl final : public CoordService::Service {
 
   Status Heartbeat(ServerContext* context, const ServerInfo* serverInfo, Confirmation* confirmation) override {
-    log(INFO, " heartbeat request " + serverInfo->clusterid());
       int cid = atoi(serverInfo->clusterid().c_str());
       if (routingTable.find(cid) == routingTable.end()) {
         confirmation->set_status(false);
         log(INFO, "Invalid cid: " + std::to_string(cid));
         return grpc::Status(grpc::StatusCode::NOT_FOUND, std::string("Cluster ID: ") + std::to_string(serverInfo->serverid()) + std::string(" not found"));
       }
-      auto znode = routingTable[cid][0];
+      zNode &znode = routingTable[cid][0];
       znode.serverID = serverInfo->serverid();
       znode.port = serverInfo->port();
       znode.type = serverInfo->type();
