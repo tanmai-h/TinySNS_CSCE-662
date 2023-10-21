@@ -7,9 +7,6 @@ To clear the directory (and remove .txt files):
    
     make clean
 
-To run the server without glog messages (port number is optional): 
-
-    ./tsd <-p port>
 
 To run coordinator, server, client (Run them on different terminals)
 ```bash
@@ -21,8 +18,8 @@ To run coordinator, server, client (Run them on different terminals)
 ```
 ### Using the startup script
 ```bash
-    bash tsn-service_start.sh
-    // Now on separate terminals start the client
-    ./tsc -h localhost -k 9090 -u 1
-    ./tsc -h localhost -k 9090 -u 2
+bash tsn-service_start.sh
+// Now on separate terminals start the client
+./tsc -h localhost -k 9090 -u 1
+./tsc -h localhost -k 9090 -u 2
 ```
