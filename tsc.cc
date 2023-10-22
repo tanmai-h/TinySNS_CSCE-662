@@ -115,6 +115,12 @@ IReply Client::processCommand(std::string& input)
     if (input == "LIST") {
       return List();
     } else if (input == "TIMELINE") {
+      IReply tmpre = List();
+      // If the server is down, we want the grpc status to not be OK
+      if (!tmpre.grpc_status.ok()){
+        ire.comm_status = FAILURE_UNKNOWN;
+        return ire;
+      }
       ire.comm_status = SUCCESS;
       return ire;
     }

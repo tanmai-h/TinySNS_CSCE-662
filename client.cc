@@ -94,14 +94,14 @@ void IClient::displayCommandReply(const std::string& comm, const IReply& reply) 
       std::cout << "Command failed with invalid command\n";
       break;
     case FAILURE_UNKNOWN:
-      std::cout << "Command failed with unknown reason\n";
+      std::cout << "Command failed\n";
       break;
     default:
-      std::cout << "Invalid status\n";
+      std::cout << "Command failed\n";
       break;
     }
   } else {
-    std::cout << "Command failed: " << reply.grpc_status.error_message() << std::endl;
+    std::cout << "Command failed" << std::endl;
   }
 }
 
