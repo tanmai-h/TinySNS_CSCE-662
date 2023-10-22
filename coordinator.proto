@@ -3,20 +3,11 @@ package csce438;
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
 
-// ------------------------------------------------------------
-// The coordinator service definition
-// These are the different functionalities exposed by service
-// ------------------------------------------------------------
-
-//Init and Heartbeat potentially redundant
 service CoordService{
   rpc Heartbeat (ServerInfo) returns (Confirmation) {}
   rpc GetServer (ID) returns (ServerInfo) {}
-  rpc create (PathAndData) returns (google.protobuf.Empty) {}
-  rpc exists (Path) returns (google.protobuf.Empty) {}
 }
 
-//server info message definition
 message ServerInfo{
   int32 serverID = 1;
   string hostname = 2;
@@ -25,18 +16,10 @@ message ServerInfo{
   string clusterID = 5;
 }
 
-//confirmation message definition
 message Confirmation{
   bool status = 1;
 }
 
-//id message definition
 message ID{
   int32 id = 1;
-}
-
-message Path{
-}
-
-message PathAndData{
 }
