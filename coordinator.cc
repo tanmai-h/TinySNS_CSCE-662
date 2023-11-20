@@ -34,6 +34,7 @@ using csce438::CoordService;
 using csce438::ServerInfo;
 using csce438::Confirmation;
 using csce438::ID;
+using csce438::AllSyncServers;
 
 #define log(severity, msg) LOG(severity) << msg; google::FlushLogFiles(google::severity); 
 
@@ -53,7 +54,7 @@ std::vector<zNode> cluster2;
 std::vector<zNode> cluster3;
 
 std::unordered_map<int, std::vector<zNode>> routingTable = {};
-
+std::vector<ServerInfo> syncServers;
 //func declarations
 int findServer(std::vector<zNode> v, int id);
 std::time_t getTimeNow();
@@ -78,19 +79,37 @@ class CoordServiceImpl final : public CoordService::Service {
         log(ERROR, "Invalid cid: " + std::to_string(cid));
         return grpc::Status(grpc::StatusCode::NOT_FOUND, std::string("Cluster ID: ") + std::to_string(serverInfo->serverid()) + std::string(" not found"));
       }
-      zNode &znode = routingTable[cid][0];
+
+      zNode znode;
       znode.serverID = serverInfo->serverid();
       znode.port = serverInfo->port();
       znode.type = serverInfo->type();
-
-      sleep(5);
       znode.last_heartbeat = getTimeNow();
+
+      if(routingTable[cid].size() == 0) {
+        znode.type = "master"; 
+        routingTable[cid].push_back(znode);
+
+      } else if (routingTable[cid].size() == 1) {
+        znode.type = "slave";
+        routingTable[cid].push_back(znode);        
+      } else {
+        if (znode.type == std::string("master")) {
+          routingTable[cid][0] = znode;
+        } else if (znode.type == std::string("slave")) {
+          routingTable[cid][1] = znode;
+        } else {
+          routingTable[cid][0] = znode;
+        }
+      }
+
       log(INFO, "Got Heartbeat from clusterId, serverId: " + std::string(serverInfo->clusterid()) + std::string(",") + std::to_string(serverInfo->serverid()));
       confirmation->set_status(true);
+      confirmation->set_type(znode.type);
 
       return Status::OK;
   }
-  
+
   Status GetServer(ServerContext* context, const ID* id, ServerInfo* serverInfo) override {
     std::cout<<"Got request for clientID: "<<id->id()<<std::endl;
     int clusterID = (id->id()-1)%3+1;
@@ -101,15 +120,30 @@ class CoordServiceImpl final : public CoordService::Service {
           serverInfo->set_serverid(c.serverID);
           serverInfo->set_hostname(c.hostname);
           serverInfo->set_port(c.port);
+          if (c.type == std::string("slave"))
+            c.type = "master";
           serverInfo->set_type(c.type);
           break;
         } else {
+          c.type = "down";
           return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Server Not Available");
         }
       }
     } else {
       return grpc::Status(grpc::StatusCode::NOT_FOUND, "Clusted info not present in routing table");
     }
+    return Status::OK;
+  }
+
+  Status GetSyncServers(ServerContext* context, const google::protobuf::Empty* request, AllSyncServers* allSyncServers) override {
+    for (const ServerInfo sync : syncServers) {
+      allSyncServers->add_servers()->CopyFrom(sync);
+    }
+    return Status::OK;
+  }
+
+  Status RegisterSyncServer(ServerContext* context, const ServerInfo* serverInfo, google::protobuf::Empty* response) override {
+    syncServers.push_back(*serverInfo);
     return Status::OK;
   }
 };
@@ -129,11 +163,10 @@ void RunServer(std::string port_no){
   // clients. In this case it corresponds to an *synchronous* service.
   builder.RegisterService(&service);
   // Finally assemble the server.
-  zNode z1,z2,z3;
-  std::vector<zNode> s1={z1},s2={z2},s3={z3};
-  routingTable[1] = s1;
-  routingTable[2] = s2;
-  routingTable[3] = s3;
+  routingTable[1] = std::vector<zNode>();
+  routingTable[2] = std::vector<zNode>();
+  routingTable[3] = std::vector<zNode>();
+  
   std::unique_ptr<Server> server(builder.BuildAndStart());
   std::cout << "Coordinator listening on " << server_address << std::endl;
 
@@ -173,7 +206,7 @@ void checkHeartbeat() {
               }
           }
       }
-      sleep(3);  // Sleep for 3 seconds before checking again
+      sleep(1);  // Sleep for 3 seconds before checking again
   }
 }
 

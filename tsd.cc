@@ -289,7 +289,7 @@ void sendHeartbeatThread(HeartbeatClient& client) {
    try {
       while (true) {
           client.SendHeartbeat();
-          std::this_thread::sleep_for(std::chrono::seconds(1));  // Adjust the interval as needed.
+          std::this_thread::sleep_for(std::chrono::seconds(10));  // Adjust the interval as needed.
       }
    } catch(const std::exception &e) {
     log(ERROR, " exception in sending heartbeat= " + std::string(e.what()));
@@ -328,7 +328,7 @@ private:
         serverInfo.set_serverid(std::stoi(serverId));
         serverInfo.set_hostname("127.0.0.1");
         serverInfo.set_port(port);
-        serverInfo.set_type("master");
+        serverInfo.set_type("new");
         serverInfo.set_clusterid(clusterId);
         std::string coordLoginInfo = coordinatorIP + ":" + coordinatorPort;
         hc = HeartbeatClient(coordLoginInfo, serverInfo);
@@ -340,7 +340,7 @@ private:
         }
     }
 
-    void RunServer() {
+     void RunServer() {
         std::thread();
         std::string server_address = "127.0.0.1:" + port;
         SNSServiceImpl service;
