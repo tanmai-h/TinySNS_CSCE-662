@@ -4,10 +4,10 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
 
 service SynchService {
-  rpc GetTLFL() returns (UsersTLFL) {}
+  rpc GetTLFL() returns (UserTLFL) {}
 }
 
-message UsersTLFL {
+message UserTLFL {
     repeated string tl = 1;
     repeated string fl = 2;
     repeated string users = 3;

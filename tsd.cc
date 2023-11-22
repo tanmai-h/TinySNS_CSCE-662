@@ -46,7 +46,7 @@
 #include <google/protobuf/util/time_util.h>
 #include <grpc++/grpc++.h>
 #include "coordinator.grpc.pb.h"
-#include<glog/logging.h>
+#include <glog/logging.h>
 #include "sns.grpc.pb.h"
 
 #define log(severity, msg) LOG(severity) << msg; google::FlushLogFiles(google::severity); 
@@ -74,7 +74,6 @@ using csce438::ID;
 struct Client {
   std::string username;
   bool connected = true;
-  int following_file_size = 0;
   std::vector<Client*> client_followers;
   std::vector<Client*> client_following;
   ServerReaderWriter<Message, Message>* stream = 0;
@@ -83,10 +82,11 @@ struct Client {
   }
 };
 
-
 //Vector that stores every client that has been created
 std::vector<Client*> client_db;
 std::shared_ptr<CoordService::Stub> channel;
+ServerInfo serverInfo;
+std::unordered_set<std::string> current_users = {};
 
 //Helper function used to find a Client object given its username
 int find_user(std::string username){
@@ -99,21 +99,38 @@ int find_user(std::string username){
   return -1;
 }
 
+std::string getfilename(std::string clientid = "") {
+    if(clientid.empty()) {
+      return ::serverInfo.type() + "/" +  ::serverInfo.clusterid() + "_currentusers.txt";
+    }
+    std::string filename = ::serverInfo.type() + "/" + ::serverInfo.clusterid() + "/" + clientid;
+    return filename;
+}
+
 class SNSServiceImpl final : public SNSService::Service {
-  
   Status List(ServerContext* context, const Request* request, ListReply* list_reply) override {
     log(INFO,"Serving List Request from: " + request->username()  + "\n");
-     
-    Client* user = client_db[find_user(request->username())];
+    std::ifstream in(getfilename(request->username()) + "_allusers.txt");
+    std::string user;
+    while(getline(in,user)) {
+      list_reply->add_all_users(user);
+    }
+    in.close();
+    in = std::ifstream(getfilename(request->username())+"_follower.txt");
+    while(getline(in,user)) {
+      list_reply->add_followers(user);
+    }
+    in.close();  
+    // Client* user = client_db[find_user(request->username())];
  
-    int index = 0;
-    for(Client* c : client_db){
-      list_reply->add_all_users(c->username);
-    }
-    std::vector<Client*>::const_iterator it;
-    for(it = user->client_followers.begin(); it!=user->client_followers.end(); it++){
-      list_reply->add_followers((*it)->username);
-    }
+    // int index = 0;
+    // for(Client* c : client_db) {
+    //   list_reply->add_all_users(c->username);
+    // }
+    // std::vector<Client*>::const_iterator it;
+    // for(it = user->client_followers.begin(); it!=user->client_followers.end(); it++){
+    //   list_reply->add_followers((*it)->username);
+    // }  
     return Status::OK;
   }
 
@@ -135,6 +152,12 @@ class SNSServiceImpl final : public SNSService::Service {
       }
       user1->client_following.push_back(user2);
       user2->client_followers.push_back(user1);
+      std::ofstream flw(getfilename(user1->username)+"_following.txt", std::ios::app);
+      flw << user2 << "\n";
+      flw.close();
+      std::ofstream flr(getfilename(user2->username)+"_follower.txt", std::ios::app);
+      flr << user1 << "\n";
+      flr.close();
       reply->set_msg("Follow Successful");
     }
     return Status::OK; 
@@ -173,16 +196,19 @@ class SNSServiceImpl final : public SNSService::Service {
       c->username = username;
       client_db.push_back(c);
       reply->set_msg("Login Successful!");
-    }
-    else{
+      std::ofstream current(getfilename(),std::ios::app|std::ios::out|std::ios::in);
+      current << username << "\n";
+      current.close();
+      current_users.insert(username);
+    } else{
       Client *user = client_db[user_index];
       if(user->connected) {
-	log(WARNING, "User already logged on");
+        log(WARNING, "User already logged on");
         reply->set_msg("you have already joined");
       }
       else{
         std::string msg = "Welcome Back " + user->username;
-	reply->set_msg(msg);
+        reply->set_msg(msg);
         user->connected = true;
       }
     }
@@ -197,10 +223,8 @@ class SNSServiceImpl final : public SNSService::Service {
       std::string username = message.username();
       int user_index = find_user(username);
       c = client_db[user_index];
- 
-      //Write the current message to "username.txt"
-      std::string filename = username+".txt";
-      std::ofstream user_file(filename,std::ios::app|std::ios::out|std::ios::in);
+      std::string filename = getfilename(username) + ".txt";
+      std::ofstream user_file(filename, std::ios::app|std::ios::out|std::ios::in);
       google::protobuf::Timestamp temptime = message.timestamp();
       std::string time = google::protobuf::util::TimeUtil::ToString(temptime);
       std::string fileinput = time+" :: "+message.username()+":"+message.msg()+"\n";
@@ -208,31 +232,30 @@ class SNSServiceImpl final : public SNSService::Service {
       if(message.msg() != "Set Stream")
         user_file << fileinput;
       //If message = "Set Stream", print the first 20 chats from the people you follow
-      else{
+      else {
         if(c->stream==0)
       	  c->stream = stream;
         std::string line;
         std::vector<std::string> newest_twenty;
-        std::ifstream in(username+"following.txt");
+        std::ifstream in(getfilename(username)+"_timeline.txt");
         int count = 0;
         //Read the last up-to-20 lines (newest 20 messages) from userfollowing.txt
         while(getline(in, line)){
           newest_twenty.push_back(line);
         }
         Message new_msg; 
- 	//Send the newest messages to the client to be displayed
+ 	      //Send the newest messages to the client to be displayed
  	      if(newest_twenty.size() >= 40){ 	
-	    for(int i = newest_twenty.size()-40; i<newest_twenty.size(); i+=2){
-	       new_msg.set_msg(newest_twenty[i]);
-	       stream->Write(new_msg);
-	    }
-        }else{
-	    for(int i = 0; i<newest_twenty.size(); i+=2){
-	       new_msg.set_msg(newest_twenty[i]);
-	       stream->Write(new_msg);
-	    }
+          for(int i = newest_twenty.size()-40; i<newest_twenty.size(); i+=2){
+            new_msg.set_msg(newest_twenty[i]);
+            stream->Write(new_msg);
+          }
+        } else{
+          for(int i = 0; i < newest_twenty.size(); i += 2){
+            new_msg.set_msg(newest_twenty[i]);
+            stream->Write(new_msg);
+	        }
         }
-        //std::cout << "newest_twenty.size() " << newest_twenty.size() << std::endl; 
         continue;
       }
       //Send the message to each follower's stream
@@ -240,22 +263,22 @@ class SNSServiceImpl final : public SNSService::Service {
       for(it = c->client_followers.begin(); it!=c->client_followers.end(); it++){
         Client *temp_client = *it;
       	if(temp_client->stream!=0 && temp_client->connected)
-	  temp_client->stream->Write(message);
-        //For each of the current user's followers, put the message in their following.txt file
+      	  temp_client->stream->Write(message);
+
         std::string temp_username = temp_client->username;
-        std::string temp_file = temp_username + "following.txt";
-	std::ofstream following_file(temp_file,std::ios::app|std::ios::out|std::ios::in);
-	following_file << fileinput;
-        temp_client->following_file_size++;
-	std::ofstream user_file(temp_username + ".txt",std::ios::app|std::ios::out|std::ios::in);
-        user_file << fileinput;
+
+	      if (current_users.find(temp_username) != current_users.end()) {
+          std::string temp_file = getfilename(temp_username) + "_timeline.txt";
+          std::ofstream user_file(temp_file,std::ios::app|std::ios::out|std::ios::in);
+          user_file << fileinput;
+          user_file.close();
+        }
       }
     }
     //If the client disconnected from Chat Mode, set connected to false
     c->connected = false;
     return Status::OK;
   }
-
 };
 
 class HeartbeatClient {
@@ -319,7 +342,6 @@ private:
     std::string serverId;
     std::string coordinatorIP;
     std::string coordinatorPort;
-    ServerInfo serverInfo;
     HeartbeatClient hc;
     std::thread ht;
   
@@ -350,6 +372,13 @@ private:
         std::unique_ptr<Server> server(builder.BuildAndStart());
         std::cout << "Server listening on " << server_address << std::endl;
         log(INFO, "Server listening on: " + server_address);
+        std::string s;
+        std::ifstream cur(getfilename(nullptr));
+        while (getline(cur,s)) {
+          current_users.insert(s);
+        }
+        cur.close();
+
         server->Wait();
     }
 };
@@ -384,7 +413,7 @@ int main(int argc, char** argv) {
     }
   }
   
-  std::string log_file_name = std::string("cluster-") + clusterId + std::string("-server-") + port;
+  std::string log_file_name = std::string("cluster-") + clusterId + std::string("-server-") + serverId + "-port-" + port;
   google::InitGoogleLogging(log_file_name.c_str());
   log(INFO, "Logging Initialized. Server starting...");
 

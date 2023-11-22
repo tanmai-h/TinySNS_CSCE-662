@@ -18,16 +18,20 @@
 #include <algorithm>
 #include <google/protobuf/util/time_util.h>
 #include <grpc++/grpc++.h>
+#include<glog/logging.h>
+#include <stdlib.h>
 
 #include "sns.grpc.pb.h"
 #include "coordinator.grpc.pb.h"
 
 namespace fs = std::filesystem;
+#define log(severity, msg) LOG(severity) << msg; google::FlushLogFiles(google::severity); 
 
 using google::protobuf::Timestamp;
 using google::protobuf::Duration;
 using grpc::Server;
 using grpc::ServerBuilder;
+using grpc::ClientContext;
 using grpc::ServerContext;
 using grpc::ServerReader;
 using grpc::ServerReaderWriter;
@@ -37,30 +41,46 @@ using csce438::CoordService;
 using csce438::ServerInfo;
 using csce438::Confirmation;
 using csce438::ID;
-using csce438::ServerList;
+using csce438::AllSyncServers;
 using csce438::SynchService;
-using csce438::UsersTLFL;
+using csce438::UserTLFL;
+using csce438::AllData;
 
 int synchID = 1;
 std::vector<std::string> get_lines_from_file(std::string);
 void run_synchronizer(std::string,std::string,std::string,int);
 std::vector<std::string> get_all_users_func(int);
-std::vector<std::string> get_tl_or_fl(int, int, bool);
+std::vector<std::string> get_tl_or_fl(int synchID, std::string clientID, std::string name);
+std::unordered_map<std::string, UserTLFL> others = {};
+google::protobuf::Empty *EMPTY = new google::protobuf::Empty;
+
+bool file_exists(const std::string& filename) {
+    std::ifstream file(filename);
+    bool good = file.good();
+    file.close();
+    return good;
+}
 
 class SynchServiceImpl final : public SynchService::Service {
-    Status GetUsersTLFL(ServerContext* context, UsersTLFL* usersTlfl) override {
+    Status GetUserTLFL(ServerContext * context, const google::protobuf::Empty* request, AllData * alldata) override {
         std::vector<std::string> list = get_all_users_func(synchID);
         for(auto s:list){
-            usersTlfl->add_users(s);
-            std::vector<std::string> tl = get_tl_or_fl(synchID, clientID, true);
-            std::vector<std::string> fl = get_tl_or_fl(synchID, clientID, false);
+            UserTLFL usertlfl;
+            usertlfl.set_user(s);
+            std::vector<std::string> tl = get_tl_or_fl(synchID, s, "tl");
+            std::vector<std::string> flw = get_tl_or_fl(synchID, s, "flw");
+            std::vector<std::string> flr = get_tl_or_fl(synchID, s, "flr");
             for(auto timeline:tl){
-                usersTlfl->add_tl(timeline);
+                usertlfl.add_tl(timeline);
             }
-            for(auto follow:fl){
-                usersTlfl->add_fl(follow);
+            for(auto follow:flw){
+                usertlfl.add_flw(follow);
             }
-            usersTlfl->add_status(true); 
+            for (auto flr : flr) {
+              usertlfl.add_flr(flr);
+            }
+            usertlfl.add_status(true);
+            alldata->add_data()->CopyFrom(usertlfl);
         }
         return Status::OK;
     }
@@ -126,12 +146,9 @@ int main(int argc, char** argv) {
 }
 
 void run_synchronizer(std::string coordIP, std::string coordPort, std::string port, int synchID) {
-    //setup coordinator stub
-    //std::cout<<"synchronizer stub"<<std::endl;
     std::string target_str = coordIP + ":" + coordPort;
     std::unique_ptr<CoordService::Stub> coord_stub_;
     coord_stub_ = std::unique_ptr<CoordService::Stub>(CoordService::NewStub(grpc::CreateChannel(target_str, grpc::InsecureChannelCredentials())));
-    //std::cout<<"MADE STUB"<<std::endl;
 
     ServerInfo msg;
     Confirmation c;
@@ -140,42 +157,75 @@ void run_synchronizer(std::string coordIP, std::string coordPort, std::string po
     msg.set_serverid(synchID);
     msg.set_hostname("127.0.0.1");
     msg.set_port(port);
-    msg.set_type("follower");
-
-    //send init heartbeat
-    AllSyncServers allsyncservers;
-
-    AllSyncServers allsyncservers;
-    while(true) {
-        //change this to 30 eventually
-        sleep(30);
-        grpc::Status status = coord_stub_->GetUsersTLFL(context, const google::protobuf::Empty, allsyncservers);
-	    if (!status.ok()) {
-            log(INFO, "Coord down ..");
-            exit(-1);
-        }
-        for (const ServerInfo serverInfo : allsyncservers) {
-           if (serverinfo.clusterID != synchID) {
-                
-           } 
-        }
-        for(auto i : aggregated_users) {
-                //get currently managed users
-                //if user IS managed by current synch
-                    //read their follower lists
-                    //for followed users that are not managed on cluster
-                    //read followed users cached timeline
-                    //check if posts are in the managed tl
-                    //add post to tl of managed user    
-            
-                     // YOUR CODE HERE
-            }
+    
+    grpc::Status status = coord_stub_->RegisterSyncServer(&context, msg, EMPTY);
+    if (!status.ok()) {
+      log(INFO, "Coord down");
+      exit(-1);
     }
 
-    return;    
+    AllSyncServers allsyncservers;
+    sleep(30);
+    coord_stub_->GetSyncServers(&context, google::protobuf::Empty(), &allsyncservers);
+    std::vector<std::unique_ptr<SynchService::Stub>> syncstubs;
+    for (const ServerInfo serverInfo : allsyncservers.servers()) {
+      if (serverInfo.clusterid() != std::to_string(synchID)) {
+        syncstubs.push_back(std::move(
+          SynchService::NewStub(
+              grpc::CreateChannel(serverInfo.serverid() + ":" + serverInfo.port(), grpc::InsecureChannelCredentials())
+            )));
+      }
+    }
+
+    while(true) {
+        AllData all;
+        std::vector<std::string> myusers = get_all_users_func(synchID);
+        for (auto & stub : syncstubs) {
+          stub->GetUserTLFL(&context, *EMPTY, &all);
+          for(const UserTLFL &d : all.data()) {
+            if (others.find(d.user()) == others.end() || others[d.user()].tl().size() < d.tl().size() || others[d.user()].flw().size() != d.flw().size() || others[d.user()].flr().size() != d.flr().size()) {
+              for (auto flr : d.flr()) {
+                  std::string m = "./master/"+std::to_string(synchID)+"/"+flr+ "_timeline";
+                  std::string s = "./slave/" +std::to_string(synchID)+"/"+flr + "_timeline";
+                  int ml = 0, sl = 0;
+                  std::vector<std::string> mt = {}, st = {};
+                  if (file_exists(m)) {
+                    mt = get_lines_from_file(m);
+                  }
+                  if (file_exists(s)) {
+                    st = get_lines_from_file(s);
+                  }
+                  std::vector<std::string> towrite;
+                  if (mt.size() > st.size()) {
+                    towrite = mt;
+                  }
+                  else {
+                    towrite = st;
+                  }
+                  for (auto line : d.tl()) {
+                    
+                  }
+              }
+            }
+            others[d.user()] = d;
+          }
+        }
+
+        // for(auto i : myusers) {
+        //     //get currently managed users
+        //     //if user IS managed by current synch
+        //         //read their follower lists
+        //         //for followed users that are not managed on cluster
+        //         //read followed users cached timeline
+        //         //check if posts are in the managed tl
+        //         //add post to tl of managed user
+        // }
+      sleep(30);
+    }
+    return ;
 }
 
-std::vector<std::string> get_lines_from_file(std::string filename){
+std::vector<std::string> get_lines_from_file(std::string filename) {
   std::vector<std::string> users;
   std::string user;
   std::ifstream file; 
@@ -195,15 +245,10 @@ std::vector<std::string> get_lines_from_file(std::string filename){
 
   file.close();
 
-  //std::cout<<"File: "<<filename<<" has users:"<<std::endl;
-  /*for(int i = 0; i<users.size(); i++){
-    std::cout<<users[i]<<std::endl;
-  }*/ 
-
   return users;
 }
 
-bool file_contains_user(std::string filename, std::string user){
+bool file_contains_user(std::string filename, std::string user) {
     std::vector<std::string> users;
     //check username is valid
     users = get_lines_from_file(filename);
@@ -219,9 +264,10 @@ bool file_contains_user(std::string filename, std::string user){
 }
 
 std::vector<std::string> get_all_users_func(int synchID){
+  
     //read all_users file master and client for correct serverID
-    std::string master_users_file = "./master"+std::to_string(synchID)+"/all_users";
-    std::string slave_users_file = "./slave"+std::to_string(synchID)+"/all_users";
+    std::string master_users_file = "./master/"+std::to_string(synchID)+"/all_users.txt";
+    std::string slave_users_file = "./slave/"+std::to_string(synchID)+"/all_users.txt";
     //take longest list and package into AllUsers message
     std::vector<std::string> master_user_list = get_lines_from_file(master_users_file);
     std::vector<std::string> slave_user_list = get_lines_from_file(slave_users_file);
@@ -232,15 +278,32 @@ std::vector<std::string> get_all_users_func(int synchID){
         return slave_user_list;
 }
 
-std::vector<std::string> get_tl_or_fl(int synchID, int clientID, bool tl){
-    std::string master_fn = "./master"+std::to_string(synchID)+"/"+std::to_string(clientID);
-    std::string slave_fn = "./slave"+std::to_string(synchID)+"/" + std::to_string(clientID);
-    if(tl){
-        master_fn.append("_timeline");
-        slave_fn.append("_timeline");
-    }else{
-        master_fn.append("_follow_list");
-        slave_fn.append("_follow_list");
+void write_lines_to_file(const std::string& filename, const std::vector<std::string>& lines) {
+    std::ofstream file(filename);
+
+    if (file.is_open()) {
+        for (const std::string& line : lines) {
+            file << line << '\n';
+        }
+
+        file.close();
+    } else {
+        std::cerr << "Unable to open file: " << filename << std::endl;
+    }
+}
+
+std::vector<std::string> get_tl_or_fl(int synchID, std::string clientID, std::string name){
+    std::string master_fn = "./master"+std::to_string(synchID)+"/" + clientID;
+    std::string slave_fn = "./slave"+std::to_string(synchID)+"/"   +  clientID;
+    if(name == "tl"){
+        master_fn.append("_timeline.txt");
+        slave_fn.append("_timeline.txt");
+    }else if (name == "flw") {
+        master_fn.append("_following.txt");
+        slave_fn.append("_following_list");
+    } else if (name == "flr") {
+        master_fn.append("_follower.txt");
+        slave_fn.append("_follower.txt");
     }
 
     std::vector<std::string> m = get_lines_from_file(master_fn);

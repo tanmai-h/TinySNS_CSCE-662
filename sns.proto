@@ -45,14 +45,19 @@ service SNSService{
 }
 
 service SynchService {
-  rpc GetUsersTLFL(google.protobuf.Empty) returns (UsersTLFL) {}
+  rpc GetUserTLFL(google.protobuf.Empty) returns (AllData) {}
 }
 
-message UsersTLFL {
+message AllData {
+  repeated UserTLFL data = 1;
+}
+
+message UserTLFL {
     repeated string tl = 1;
-    repeated string fl = 2;
-    repeated string users = 3;
-    repeated bool status = 4;
+    repeated string flw = 2;
+    repeated string flr = 3;
+    string user = 4;
+    repeated bool status = 5;
 }
 
 message ListReply {

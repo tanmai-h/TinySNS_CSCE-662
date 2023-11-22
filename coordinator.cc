@@ -30,7 +30,7 @@ using grpc::ServerReader;
 using grpc::ServerReaderWriter;
 using grpc::ServerWriter;
 using grpc::Status;
-using csce438::CoordService;
+using csce438::CoordService;   
 using csce438::ServerInfo;
 using csce438::Confirmation;
 using csce438::ID;
@@ -98,8 +98,11 @@ class CoordServiceImpl final : public CoordService::Service {
           routingTable[cid][0] = znode;
         } else if (znode.type == std::string("slave")) {
           routingTable[cid][1] = znode;
-        } else {
-          routingTable[cid][0] = znode;
+        } else if(znode.type == std::string("new")) {
+          znode.type = "slave";
+          routingTable[cid][0] = routingTable[cid][1];
+          routingTable[cid][0].type = "master";
+          routingTable[cid][1] = znode;
         }
       }
 
@@ -210,6 +213,6 @@ void checkHeartbeat() {
   }
 }
 
-std::time_t getTimeNow(){
+std::time_t getTimeNow(){ 
     return std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 }
