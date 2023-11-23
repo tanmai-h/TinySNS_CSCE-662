@@ -100,24 +100,32 @@ int find_user(std::string username){
 }
 
 std::string getfilename(std::string clientid = "") {
+    std::string n = "";
     if(clientid.empty()) {
-      return ::serverInfo.type() + "/" +  ::serverInfo.clusterid() + "_currentusers.txt";
+      n = "./" + ::serverInfo.type() + "_" +  ::serverInfo.clusterid() + "_currentusers.txt";
     }
-    std::string filename = ::serverInfo.type() + "/" + ::serverInfo.clusterid() + "/" + clientid;
-    return filename;
+    else 
+      n = "./" + ::serverInfo.type() + "_" + ::serverInfo.clusterid() + "_" + clientid;
+    std::cout << " FILENAME= " << n << "\n";
+    return n;
 }
 
 class SNSServiceImpl final : public SNSService::Service {
   Status List(ServerContext* context, const Request* request, ListReply* list_reply) override {
     log(INFO,"Serving List Request from: " + request->username()  + "\n");
-    std::ifstream in(getfilename(request->username()) + "_allusers.txt");
+    std::cout << " Serving List Request from: " << request->username() << "\n";
+    std::ifstream in(getfilename(), std::ios::in | std::ios::out);
     std::string user;
+    std::cout << "all: \n";
     while(getline(in,user)) {
       list_reply->add_all_users(user);
+      std::cout << "\t" << user << "\n";
     }
     in.close();
     in = std::ifstream(getfilename(request->username())+"_follower.txt");
+    std::cout << "follower: \n";
     while(getline(in,user)) {
+      std::cout << "\t" << user << "\n";
       list_reply->add_followers(user);
     }
     in.close();  
@@ -190,7 +198,6 @@ class SNSServiceImpl final : public SNSService::Service {
     Client* c = new Client();
     std::string username = request->username();
     log(INFO, "Serving Login Request: " + username + "\n");
-    
     int user_index = find_user(username);
     if(user_index < 0){
       c->username = username;
@@ -205,8 +212,7 @@ class SNSServiceImpl final : public SNSService::Service {
       if(user->connected) {
         log(WARNING, "User already logged on");
         reply->set_msg("you have already joined");
-      }
-      else{
+      } else{
         std::string msg = "Welcome Back " + user->username;
         reply->set_msg(msg);
         user->connected = true;
@@ -298,7 +304,10 @@ public:
           log(ERROR, "Could not get the correct reply for Heartbeat from Coordinator");
           exit(-1);
       }
-      log(INFO, " Got confirmation from cooridinator");
+      serverInfo_.set_type(confirmation.type());
+      ::serverInfo.set_type(confirmation.type());
+      std::cout << "Recevied conf for heartbeat, now type= " << confirmation.type() << "\n";
+      log(INFO, "Got confirmation from cooridinator type=" + confirmation.type());
   }
 
   private:
@@ -309,9 +318,11 @@ public:
 };
 
 void sendHeartbeatThread(HeartbeatClient& client) {
+   bool firstb = false;
    try {
       while (true) {
           client.SendHeartbeat();
+          if (!firstb) {}
           std::this_thread::sleep_for(std::chrono::seconds(10));  // Adjust the interval as needed.
       }
    } catch(const std::exception &e) {
@@ -372,12 +383,6 @@ private:
         std::unique_ptr<Server> server(builder.BuildAndStart());
         std::cout << "Server listening on " << server_address << std::endl;
         log(INFO, "Server listening on: " + server_address);
-        std::string s;
-        std::ifstream cur(getfilename(nullptr));
-        while (getline(cur,s)) {
-          current_users.insert(s);
-        }
-        cur.close();
 
         server->Wait();
     }

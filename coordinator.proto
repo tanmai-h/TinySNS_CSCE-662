@@ -21,7 +21,7 @@ message ServerInfo{
 message Confirmation{
   bool status = 1;
   string type = 2;
-}
+} 
 
 message ID{
   int32 id = 1;

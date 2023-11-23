@@ -91,17 +91,24 @@ class CoordServiceImpl final : public CoordService::Service {
         routingTable[cid].push_back(znode);
 
       } else if (routingTable[cid].size() == 1) {
-        znode.type = "slave";
-        routingTable[cid].push_back(znode);        
+          if(znode.type == "new") {
+            znode.type = "slave";
+            routingTable[cid].push_back(znode);
+          } 
+          if (znode.type == "master") {
+            routingTable[cid][0] = znode;
+          }
       } else {
         if (znode.type == std::string("master")) {
           routingTable[cid][0] = znode;
         } else if (znode.type == std::string("slave")) {
-          routingTable[cid][1] = znode;
+          if (routingTable[cid][0].type == "down") {
+            znode.type = "master";
+            routingTable[cid][1] = routingTable[cid][0];
+            routingTable[cid][0] = znode;
+          }
         } else if(znode.type == std::string("new")) {
           znode.type = "slave";
-          routingTable[cid][0] = routingTable[cid][1];
-          routingTable[cid][0].type = "master";
           routingTable[cid][1] = znode;
         }
       }
@@ -123,13 +130,8 @@ class CoordServiceImpl final : public CoordService::Service {
           serverInfo->set_serverid(c.serverID);
           serverInfo->set_hostname(c.hostname);
           serverInfo->set_port(c.port);
-          if (c.type == std::string("slave"))
-            c.type = "master";
           serverInfo->set_type(c.type);
           break;
-        } else {
-          c.type = "down";
-          return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Server Not Available");
         }
       }
     } else {
@@ -204,6 +206,8 @@ void checkHeartbeat() {
           for (zNode& server : clusterPair.second) {
               if (server.isActive() && difftime(getTimeNow(), server.last_heartbeat) > 10) {
                   server.missed_heartbeat = true;
+                  std::cout << " marking this server as down: " << server.type << "\n";
+                  server.type = "down";
               } else if (!server.isActive() && difftime(getTimeNow(), server.last_heartbeat) <= 10) {
                   server.missed_heartbeat = false;
               }
