@@ -99,13 +99,43 @@ int find_user(std::string username){
   return -1;
 }
 
-std::string getfilename(std::string clientid = "") {
-    std::string n = "";
-    if(clientid.empty()) {
-      n = "./" + ::serverInfo.type() + "_" +  ::serverInfo.clusterid() + "_currentusers.txt";
+void copier(){
+    std::vector<std::string> cusers;
+    std::string tmp;
+    std::vector<std::string> fnames = {"current", "all"};
+    for (auto s : fnames) {
+      std::ifstream source(getfilename(s, true), std::ios::binary);
+      std::ofstream dest(getfilename(s), std::ios::binary);
+      dest << source.rdbuf();
+      source.close(); dest.close();
     }
-    else 
-      n = "./" + ::serverInfo.type() + "_" + ::serverInfo.clusterid() + "_" + clientid;
+    in.close();
+    fnames = {"_timeline.txt", "_follower.txt", "_following.txt"};
+    for (auto s : cusers) {
+      std::string base = getfilename(s,true);
+      std::string dbase = getfilename(s);
+      for (auto fn : fnames) {
+        std::ifstream source (base  + fn,  std::ios::binary);
+        std::ofstream dest   (dbase + fn,  std::ios::binary);
+        dest << source.rdbuf();
+        source.close(); dest.close();
+      }
+    }
+}
+
+std::string getfilename(std::string clientid = "current", std::string getother=false) {
+    std::string n = "";
+    std::string server_type = :serverInfo.type();
+    if (getother) 
+      server_type = "slave" ? server_type == "master" : "master";
+    if(clientid == "current") {
+      n = "./" + server_type + "_" + ::serverInfo.clusterid() + "_currentusers.txt";
+    }
+    else if (clientid == "all"){
+      n = "./" + server_type + "_" + ::serverInfo.clusterid() + "_allusers.txt";
+    } else {
+      n = "./" + server_type + "_" + ::serverInfo.clusterid() + "_" + clientid;
+    }
     std::cout << " FILENAME= " << n << "\n";
     return n;
 }
@@ -129,16 +159,6 @@ class SNSServiceImpl final : public SNSService::Service {
       list_reply->add_followers(user);
     }
     in.close();  
-    // Client* user = client_db[find_user(request->username())];
- 
-    // int index = 0;
-    // for(Client* c : client_db) {
-    //   list_reply->add_all_users(c->username);
-    // }
-    // std::vector<Client*>::const_iterator it;
-    // for(it = user->client_followers.begin(); it!=user->client_followers.end(); it++){
-    //   list_reply->add_followers((*it)->username);
-    // }  
     return Status::OK;
   }
 
@@ -151,24 +171,19 @@ class SNSServiceImpl final : public SNSService::Service {
     int join_index = find_user(username2);
     if(join_index < 0 || username1 == username2)
       reply->set_msg("Join Failed -- Invalid Username");
-    else{
+    else {
       Client *user1 = client_db[find_user(username1)];
-      Client *user2 = client_db[join_index];      
-      if(std::find(user1->client_following.begin(), user1->client_following.end(), user2) != user1->client_following.end()){
-	reply->set_msg("Join Failed -- Already Following User");
-        return Status::OK;
-      }
-      user1->client_following.push_back(user2);
-      user2->client_followers.push_back(user1);
+      Client *user2 = nullptr;
+      if (join_index >= 0) user2 = client_db[join_index];      
       std::ofstream flw(getfilename(user1->username)+"_following.txt", std::ios::app);
-      flw << user2 << "\n";
+      flw << username2 << "\n";
       flw.close();
       std::ofstream flr(getfilename(user2->username)+"_follower.txt", std::ios::app);
-      flr << user1 << "\n";
+      flr << username1 << "\n";
       flr.close();
       reply->set_msg("Follow Successful");
     }
-    return Status::OK; 
+    return Status::OK;
   }
 
   Status UnFollow(ServerContext* context, const Request* request, Reply* reply) override {
@@ -177,19 +192,8 @@ class SNSServiceImpl final : public SNSService::Service {
     log(INFO,"Serving Unfollow Request from: " + username1 + " for: " + username2);
  
     int leave_index = find_user(username2);
-    if(leave_index < 0 || username1 == username2) {
+    if(username1 == username2) {
       reply->set_msg("Unknown follower");
-    } else{
-      Client *user1 = client_db[find_user(username1)];
-      Client *user2 = client_db[leave_index];
-      if(std::find(user1->client_following.begin(), user1->client_following.end(), user2) == user1->client_following.end()){
-	reply->set_msg("You are not a follower");
-        return Status::OK;
-      }
-      
-      user1->client_following.erase(find(user1->client_following.begin(), user1->client_following.end(), user2)); 
-      user2->client_followers.erase(find(user2->client_followers.begin(), user2->client_followers.end(), user1));
-      reply->set_msg("UnFollow Successful");
     }
     return Status::OK;
   }
@@ -203,15 +207,21 @@ class SNSServiceImpl final : public SNSService::Service {
       c->username = username;
       client_db.push_back(c);
       reply->set_msg("Login Successful!");
+      
       std::ofstream current(getfilename(),std::ios::app|std::ios::out|std::ios::in);
       current << username << "\n";
       current.close();
       current_users.insert(username);
-    } else{
+      
+      std::ofstream all(getfilename("all"),std::ios::app|std::ios::out|std::ios::in);
+      all << username << "\n";
+      all.close();
+    } else {
       Client *user = client_db[user_index];
       if(user->connected) {
         log(WARNING, "User already logged on");
-        reply->set_msg("you have already joined");
+        std::string msg = "Welcome Back " + user->username;
+        reply->set_msg(msg);
       } else{
         std::string msg = "Welcome Back " + user->username;
         reply->set_msg(msg);
@@ -301,13 +311,16 @@ public:
       Confirmation confirmation;
       grpc::Status grpcStatus = stub_->Heartbeat(&clientContext, serverInfo_, &confirmation);
       if (!grpcStatus.ok() || !confirmation.status()) {
-          log(ERROR, "Could not get the correct reply for Heartbeat from Coordinator");
-          exit(-1);
+        log(ERROR, "Could not get the correct reply for Heartbeat from Coordinator");
+        exit(-1);
+      }
+      if (::serverInfo.type() == "slave" && confirmation.type() == "master") {
+        copier();
       }
       serverInfo_.set_type(confirmation.type());
       ::serverInfo.set_type(confirmation.type());
-      std::cout << "Recevied conf for heartbeat, now type= " << confirmation.type() << "\n";
-      log(INFO, "Got confirmation from cooridinator type=" + confirmation.type());
+      std::cout << "Recevied confirmation for heartbeat, now type= " << confirmation.type() << "\n";
+      log(INFO, "Got confirmation from cooridinator  now type=" + confirmation.type());
   }
 
   private:
@@ -326,7 +339,7 @@ void sendHeartbeatThread(HeartbeatClient& client) {
           std::this_thread::sleep_for(std::chrono::seconds(10));  // Adjust the interval as needed.
       }
    } catch(const std::exception &e) {
-    log(ERROR, " exception in sending heartbeat= " + std::string(e.what()));
+      log(ERROR, " exception in sending heartbeat= " + std::string(e.what()));
    }
 }
 

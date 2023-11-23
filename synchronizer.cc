@@ -67,7 +67,7 @@ class SynchServiceImpl final : public SynchService::Service {
         for(auto s:list){
             UserTLFL usertlfl;
             usertlfl.set_user(s);
-            std::vector<std::string> tl = get_tl_or_fl(synchID, s, "tl");
+            std::vector<std::string> tl  = get_tl_or_fl(synchID, s, "tl");
             std::vector<std::string> flw = get_tl_or_fl(synchID, s, "flw");
             std::vector<std::string> flr = get_tl_or_fl(synchID, s, "flr");
             for(auto timeline:tl){
@@ -295,7 +295,7 @@ void write_lines_to_file(const std::string& filename, const std::vector<std::str
 std::vector<std::string> get_tl_or_fl(int synchID, std::string clientID, std::string name){
     std::string master_fn = "./master"+std::to_string(synchID)+"/" + clientID;
     std::string slave_fn = "./slave"+std::to_string(synchID)+"/"   +  clientID;
-    if(name == "tl"){
+    if(name == "tl") {
         master_fn.append("_timeline.txt");
         slave_fn.append("_timeline.txt");
     }else if (name == "flw") {
@@ -304,8 +304,10 @@ std::vector<std::string> get_tl_or_fl(int synchID, std::string clientID, std::st
     } else if (name == "flr") {
         master_fn.append("_follower.txt");
         slave_fn.append("_follower.txt");
+    } else if (name = "current") {
+        master_fn.append("_currentuser.txt");
+        slave_fn.append("_currentuser.txt");
     }
-
     std::vector<std::string> m = get_lines_from_file(master_fn);
     std::vector<std::string> s = get_lines_from_file(slave_fn);
 
