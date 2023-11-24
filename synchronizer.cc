@@ -49,11 +49,12 @@ using csce438::Empty;
 using csce438::ID;
 
 int synchID = 1;
-std::vector<std::string> get_lines_from_file(std::string);
+std::vector<std::string> get_lines_from_file(std::string,bool);
 void run_synchronizer(std::string,std::string,std::string,int);
 std::vector<std::string> get_all_users_func(int);
 std::vector<std::string> get_tl_or_fl(int synchID, std::string clientID, std::string name);
-std::unordered_map<std::string, UserTLFL> others = {};
+std::unordered_map<std::string, std::unordered_map<std::string, std::vector<std::string>>> others = {};
+void appender(std::vector<std::string> &v, const google::protobuf::RepeatedPtrField<std::string>&  data);
 
 bool file_exists(const std::string& filename) {
     std::ifstream file(filename);
@@ -65,24 +66,25 @@ bool file_exists(const std::string& filename) {
 class SynchServiceImpl final : public SynchService::Service {
     Status GetUserTLFL(ServerContext * context, const ID * id, AllData * alldata) override {
         std::cout << " REQ for GetUserTLFL from synchID=" << id->id() << "\n";
-        std::vector<std::string> list = get_lines_from_file("./"+std::string("master_")+std::to_string(synchID)+"_currentusers.txt");
+        std::string fcurr = "./"+std::string("master_")+std::to_string(synchID)+"_currentusers.txt";
+        std::vector<std::string> list = get_lines_from_file(fcurr,false);
         for(auto s:list) {
             UserTLFL usertlfl;
             std::cout << " for current user: " << s << "\n";
             usertlfl.set_user(s);
             std::vector<std::string> tl  = get_tl_or_fl(synchID, s, "tl");
-            for (auto s : tl) {
-              std::cout << "\t TIMELINE: " << s << "\n";
-            }
+            // for (auto s : tl) {
+            //   std::cout << "\t TIMELINE: " << s << "\n";
+            // }
             std::vector<std::string> flw = get_tl_or_fl(synchID, s, "flw");
-            for (auto s : flw) {
-              std::cout << "\t FOLLOWING: " << s << "\n";
-            }
+            // for (auto s : flw) {
+            //   std::cout << "\t FOLLOWING: " << s << "\n";
+            // }
             std::vector<std::string> flr = get_tl_or_fl(synchID, s, "flr");
-            for (auto s : flr) {
-              std::cout << "\t FOLLOWER: " << s << "\n";
-            }
-            std::cout << "\n\n";
+            // for (auto s : flr) {
+            //   std::cout << "\t FOLLOWER: " << s << "\n";
+            // }
+            // std::cout << "\n\n";
             for(auto timeline:tl){
                 usertlfl.add_tl(timeline);
             }
@@ -205,39 +207,46 @@ void run_synchronizer(std::string coordIP, std::string coordPort, std::string po
           stub->GetUserTLFL(&ctx, id, &all);
           for(const UserTLFL &d : all.data()) {
             std::cout << "\t\tgot data from " << d.user() << "\n";
-            if (others.find(d.user()) == others.end() || others[d.user()].tl().size() < d.tl().size() || others[d.user()].flw().size() != d.flw().size() || others[d.user()].flr().size() != d.flr().size()) {
-              for (auto flr : d.flr()) {
-                  // std::string m = "./master/"+std::to_string(synchID)+"/"+flr + "_timeline";
-                  // std::string s = "./slave/" +std::to_string(synchID)+"/"+flr + "_timeline";
-                  // int ml = 0, sl = 0;
-                  // std::vector<std::string> mt = {}, st = {};
-                  // if (file_exists(m)) {
-                  //   mt = get_lines_from_file(m);
-                  // }
-                  // if (file_exists(s)) {
-                  //   st = get_lines_from_file(s);
-                  // }
-                  // std::vector<std::string> towrite;
-                  // if (mt.size() > st.size()) {
-                  //   towrite = mt;
-                  // }
-                  // else {
-                  //   towrite = st;
-                  // }
-                  // for (auto line : d.tl()) {
-                    
-                  // }
-              }
+            if (others.find(d.user()) == others.end()) {
+              std::unordered_map<std::string, std::vector<std::string>> tmp = {};
+              tmp["tl"] = std::vector<std::string>();
+              tmp["flr"] = std::vector<std::string>();
+              tmp["flw"] = std::vector<std::string>();
+              others[d.user()] = tmp;
             }
-            others[d.user()] = d;
+            auto u = others[d.user()];
+            appender(u["tl"],d.tl());
+            appender(u["flr"],d.flr());
+            appender(u["flw"],d.flw());
           }
         }
-      sleep(5);
+
+        for (auto pair : others) { // string, UserTLFL
+          std::cout << " OTHER_USER= " << pair.first  << "\n";
+          std::cout << "TIMELINE: \n";
+          for (auto tl : pair.second["tl"]){
+            std::cout << "\t" << tl << "\n";
+          }
+          std::cout << "\n FOLLOWERS: \n";
+          for (auto flr : pair.second["flr"])
+            std::cout << "\t" << flr << "\n";
+          std::cout << " FOLLOW: \n"; 
+          for (auto flw : pair.second["flw"])
+            std::cout << "\t" << flw << "\n"; 
+        }
+
+      sleep(20);
     }
     return ;
 }
 
-std::vector<std::string> get_lines_from_file(std::string filename) {
+void appender(std::vector<std::string> &v, const google::protobuf::RepeatedPtrField<std::string>& data) {
+  for (auto d : data) {
+    if (find(v.begin(), v.end(), d) == v.end())
+      v.push_back(d);
+  }
+}
+std::vector<std::string> get_lines_from_file(std::string filename, bool skip=false) {
   std::cout << " opening: " << filename << "\n";
   std::vector<std::string> users;
   std::string user;
@@ -249,11 +258,13 @@ std::vector<std::string> get_lines_from_file(std::string filename) {
     file.close();
     return users;
   }
+  int i = 0;
   while(file){
     getline(file,user);
 
-    if(!user.empty())
+    if(!user.empty() && (!skip || i %2 == 0))
       users.push_back(user);
+    i += 1;
   } 
 
   file.close();
@@ -308,9 +319,11 @@ void write_lines_to_file(const std::string& filename, const std::vector<std::str
 std::vector<std::string> get_tl_or_fl(int synchID, std::string clientID, std::string name){
     std::string master_fn = "./master_"+std::to_string(synchID)+"_" + clientID;
     std::string slave_fn = "./slave_"+std::to_string(synchID)+"_"   +  clientID;
+    bool skip = false;
     if(name == "tl") {
         master_fn.append(".txt");
         slave_fn.append(".txt");
+        skip = true;
     }else if (name == "flw") {
         master_fn.append("_following.txt");
         slave_fn.append("_following.txt");
@@ -321,8 +334,8 @@ std::vector<std::string> get_tl_or_fl(int synchID, std::string clientID, std::st
         master_fn.append("_currentuser.txt");
         slave_fn.append("_currentuser.txt");
     }
-    std::vector<std::string> m = get_lines_from_file(master_fn);
-    std::vector<std::string> s = get_lines_from_file(slave_fn);
+    std::vector<std::string> m = get_lines_from_file(master_fn,skip);
+    std::vector<std::string> s = get_lines_from_file(slave_fn,skip);
 
     if(m.size()>=s.size()){
         return m;
