@@ -34,6 +34,7 @@ using csce438::CoordService;
 using csce438::ServerInfo;
 using csce438::Confirmation;
 using csce438::ID;
+using csce438::Empty;
 using csce438::AllSyncServers;
 
 #define log(severity, msg) LOG(severity) << msg; google::FlushLogFiles(google::severity); 
@@ -140,15 +141,19 @@ class CoordServiceImpl final : public CoordService::Service {
     return Status::OK;
   }
 
-  Status GetSyncServers(ServerContext* context, const google::protobuf::Empty* request, AllSyncServers* allSyncServers) override {
+  Status GetSyncServers(ServerContext* context, const Empty * empty, AllSyncServers* allSyncServers) override {
+    
     for (const ServerInfo sync : syncServers) {
       allSyncServers->add_servers()->CopyFrom(sync);
     }
     return Status::OK;
   }
 
-  Status RegisterSyncServer(ServerContext* context, const ServerInfo* serverInfo, google::protobuf::Empty* response) override {
+  Status RegisterSyncServer(ServerContext* context, const ServerInfo* serverInfo, Empty * empty) override {
     syncServers.push_back(*serverInfo);
+    for (auto s : syncServers) {
+      std::cout << " got for " << s.hostname() << " - " << s.port() << " - " << s.type() << " - " << s.clusterid() << "\n";
+    }
     return Status::OK;
   }
 };

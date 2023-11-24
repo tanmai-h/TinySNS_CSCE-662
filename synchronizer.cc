@@ -45,6 +45,8 @@ using csce438::AllSyncServers;
 using csce438::SynchService;
 using csce438::UserTLFL;
 using csce438::AllData;
+using csce438::Empty;
+using csce438::ID;
 
 int synchID = 1;
 std::vector<std::string> get_lines_from_file(std::string);
@@ -52,7 +54,7 @@ void run_synchronizer(std::string,std::string,std::string,int);
 std::vector<std::string> get_all_users_func(int);
 std::vector<std::string> get_tl_or_fl(int synchID, std::string clientID, std::string name);
 std::unordered_map<std::string, UserTLFL> others = {};
-google::protobuf::Empty *EMPTY = new google::protobuf::Empty;
+google::protobuf::Empty EMPTY();
 
 bool file_exists(const std::string& filename) {
     std::ifstream file(filename);
@@ -62,9 +64,9 @@ bool file_exists(const std::string& filename) {
 }
 
 class SynchServiceImpl final : public SynchService::Service {
-    Status GetUserTLFL(ServerContext * context, const google::protobuf::Empty* request, AllData * alldata) override {
-        std::vector<std::string> list = get_all_users_func(synchID);
-        for(auto s:list){
+    Status GetUserTLFL(ServerContext * context, const ID * id, AllData * alldata) override {
+        std::vector<std::string> list = get_lines_from_file("./"+std::string("master_")+std::to_string(synchID)+"_currentusers.txt");
+        for(auto s:list) {
             UserTLFL usertlfl;
             usertlfl.set_user(s);
             std::vector<std::string> tl  = get_tl_or_fl(synchID, s, "tl");
@@ -79,7 +81,6 @@ class SynchServiceImpl final : public SynchService::Service {
             for (auto flr : flr) {
               usertlfl.add_flr(flr);
             }
-            usertlfl.add_status(true);
             alldata->add_data()->CopyFrom(usertlfl);
         }
         return Status::OK;
@@ -113,14 +114,15 @@ void RunServer(std::string coordIP, std::string coordPort, std::string port_no, 
   // Wait for the server to shutdown. Note that some other thread must be
   // responsible for shutting down the server for this call to ever return.
   server->Wait();
+  t1.join();
 }
 
 int main(int argc, char** argv) {
   
   int opt = 0;
-  std::string coordIP;
-  std::string coordPort;
-  std::string port = "3029";
+  std::string coordIP = "localhost";
+  std::string coordPort = "9090";
+  std::string port = "1234";
 
   while ((opt = getopt(argc, argv, "h:j:p:n:")) != -1){
     switch(opt) {
@@ -157,16 +159,17 @@ void run_synchronizer(std::string coordIP, std::string coordPort, std::string po
     msg.set_serverid(synchID);
     msg.set_hostname("127.0.0.1");
     msg.set_port(port);
-    
-    grpc::Status status = coord_stub_->RegisterSyncServer(&context, msg, EMPTY);
+    Empty empty;
+
+    grpc::Status status = coord_stub_->RegisterSyncServer(&context, msg, &empty);
     if (!status.ok()) {
       log(INFO, "Coord down");
       exit(-1);
     }
 
     AllSyncServers allsyncservers;
-    sleep(30);
-    coord_stub_->GetSyncServers(&context, google::protobuf::Empty(), &allsyncservers);
+    sleep(10);
+    coord_stub_->GetSyncServers(&context, empty, &allsyncservers);
     std::vector<std::unique_ptr<SynchService::Stub>> syncstubs;
     for (const ServerInfo serverInfo : allsyncservers.servers()) {
       if (serverInfo.clusterid() != std::to_string(synchID)) {
@@ -176,16 +179,16 @@ void run_synchronizer(std::string coordIP, std::string coordPort, std::string po
             )));
       }
     }
-
+    ID id;
     while(true) {
         AllData all;
         std::vector<std::string> myusers = get_all_users_func(synchID);
         for (auto & stub : syncstubs) {
-          stub->GetUserTLFL(&context, *EMPTY, &all);
+          stub->GetUserTLFL(&context, id, &all);
           for(const UserTLFL &d : all.data()) {
             if (others.find(d.user()) == others.end() || others[d.user()].tl().size() < d.tl().size() || others[d.user()].flw().size() != d.flw().size() || others[d.user()].flr().size() != d.flr().size()) {
               for (auto flr : d.flr()) {
-                  std::string m = "./master/"+std::to_string(synchID)+"/"+flr+ "_timeline";
+                  std::string m = "./master/"+std::to_string(synchID)+"/"+flr + "_timeline";
                   std::string s = "./slave/" +std::to_string(synchID)+"/"+flr + "_timeline";
                   int ml = 0, sl = 0;
                   std::vector<std::string> mt = {}, st = {};
@@ -210,17 +213,7 @@ void run_synchronizer(std::string coordIP, std::string coordPort, std::string po
             others[d.user()] = d;
           }
         }
-
-        // for(auto i : myusers) {
-        //     //get currently managed users
-        //     //if user IS managed by current synch
-        //         //read their follower lists
-        //         //for followed users that are not managed on cluster
-        //         //read followed users cached timeline
-        //         //check if posts are in the managed tl
-        //         //add post to tl of managed user
-        // }
-      sleep(30);
+      sleep(5);
     }
     return ;
 }
@@ -304,7 +297,7 @@ std::vector<std::string> get_tl_or_fl(int synchID, std::string clientID, std::st
     } else if (name == "flr") {
         master_fn.append("_follower.txt");
         slave_fn.append("_follower.txt");
-    } else if (name = "current") {
+    } else if (name == "current") {
         master_fn.append("_currentuser.txt");
         slave_fn.append("_currentuser.txt");
     }
