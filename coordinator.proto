@@ -6,8 +6,12 @@ import "google/protobuf/empty.proto";
 service CoordService{
   rpc Heartbeat (ServerInfo) returns (Confirmation) {}
   rpc GetServer (ID) returns (ServerInfo) {}
-  rpc GetSyncServers (google.protobuf.Empty) returns (AllSyncServers) {}
-  rpc RegisterSyncServer(ServerInfo) returns (google.protobuf.Empty) {}
+  rpc GetSyncServers (Empty) returns (AllSyncServers) {}
+  rpc RegisterSyncServer(ServerInfo) returns (Confirmation) {}
+}
+
+service SynchService {
+  rpc GetUserTLFL(ID) returns (AllData) {}
 }
 
 message ServerInfo{
@@ -29,4 +33,20 @@ message ID{
 
 message AllSyncServers {
   repeated ServerInfo servers = 1;
+}
+
+message Empty {
+  
+}
+
+message AllData {
+  repeated UserTLFL data = 1;
+}
+
+message UserTLFL {
+    repeated string tl = 1;
+    repeated string flw = 2;
+    repeated string flr = 3;
+    string user = 4;
+    repeated bool status = 5;
 }

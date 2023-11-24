@@ -142,23 +142,23 @@ class CoordServiceImpl final : public CoordService::Service {
   }
 
   Status GetSyncServers(ServerContext* context, const Empty * empty, AllSyncServers* allSyncServers) override {
-    
+    log(INFO, " REQ for all synchronizer info");
     for (const ServerInfo sync : syncServers) {
       allSyncServers->add_servers()->CopyFrom(sync);
     }
     return Status::OK;
   }
 
-  Status RegisterSyncServer(ServerContext* context, const ServerInfo* serverInfo, Empty * empty) override {
+  Status RegisterSyncServer(ServerContext* context, const ServerInfo* serverInfo, Confirmation* confirmation) override {
     syncServers.push_back(*serverInfo);
-    for (auto s : syncServers) {
-      std::cout << " got for " << s.hostname() << " - " << s.port() << " - " << s.type() << " - " << s.clusterid() << "\n";
-    }
+    log(INFO, " Registered synchronizer on port="+serverInfo->port() + " clusterID="+serverInfo->clusterid());
+    confirmation->set_type("registered");
+    confirmation->set_status(true);
     return Status::OK;
   }
 };
 
-void RunServer(std::string port_no){
+void RunServer(std::string port_no) {
   //start thread to check heartbeats
   std::thread hb(checkHeartbeat);
   //localhost = 127.0.0.1

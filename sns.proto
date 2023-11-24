@@ -44,22 +44,6 @@ service SNSService{
   rpc Timeline (stream Message) returns (stream Message) {} 
 }
 
-service SynchService {
-  rpc GetUserTLFL(google.protobuf.Empty) returns (AllData) {}
-}
-
-message AllData {
-  repeated UserTLFL data = 1;
-}
-
-message UserTLFL {
-    repeated string tl = 1;
-    repeated string flw = 2;
-    repeated string flr = 3;
-    string user = 4;
-    repeated bool status = 5;
-}
-
 message ListReply {
   repeated string all_users = 1;
   repeated string followers = 2;
