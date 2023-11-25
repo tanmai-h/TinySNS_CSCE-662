@@ -54,7 +54,7 @@ void run_synchronizer(std::string,std::string,std::string,int);
 std::vector<std::string> get_all_users_func(int);
 std::vector<std::string> get_tl_or_fl(int synchID, std::string clientID, std::string name);
 std::unordered_map<std::string, std::unordered_map<std::string, std::vector<std::string>>> others = {};
-void appender(std::vector<std::string> &v, const google::protobuf::RepeatedPtrField<std::string>&  data);
+std::vector<std::string> appender(std::vector<std::string> &v, const google::protobuf::RepeatedPtrField<std::string>&  data);
 
 bool file_exists(const std::string& filename) {
     std::ifstream file(filename);
@@ -67,24 +67,13 @@ class SynchServiceImpl final : public SynchService::Service {
     Status GetUserTLFL(ServerContext * context, const ID * id, AllData * alldata) override {
         std::cout << " REQ for GetUserTLFL from synchID=" << id->id() << "\n";
         std::string fcurr = "./"+std::string("master_")+std::to_string(synchID)+"_currentusers.txt";
-        std::vector<std::string> list = get_lines_from_file(fcurr,false);
-        for(auto s:list) {
+        std::vector<std::string> current_users = get_lines_from_file(fcurr,false);
+        for(auto s:current_users) {
             UserTLFL usertlfl;
-            std::cout << " for current user: " << s << "\n";
             usertlfl.set_user(s);
             std::vector<std::string> tl  = get_tl_or_fl(synchID, s, "tl");
-            // for (auto s : tl) {
-            //   std::cout << "\t TIMELINE: " << s << "\n";
-            // }
             std::vector<std::string> flw = get_tl_or_fl(synchID, s, "flw");
-            // for (auto s : flw) {
-            //   std::cout << "\t FOLLOWING: " << s << "\n";
-            // }
             std::vector<std::string> flr = get_tl_or_fl(synchID, s, "flr");
-            // for (auto s : flr) {
-            //   std::cout << "\t FOLLOWER: " << s << "\n";
-            // }
-            // std::cout << "\n\n";
             for(auto timeline:tl){
                 usertlfl.add_tl(timeline);
             }
@@ -207,47 +196,60 @@ void run_synchronizer(std::string coordIP, std::string coordPort, std::string po
           stub->GetUserTLFL(&ctx, id, &all);
           for(const UserTLFL &d : all.data()) {
             std::cout << "\t\tgot data from " << d.user() << "\n";
+            std::unordered_map<std::string, std::vector<std::string>> tmp = {};
+            tmp["tl"] = std::vector<std::string>();
+            tmp["flr"] = std::vector<std::string>();
+            tmp["flw"] = std::vector<std::string>();
             if (others.find(d.user()) == others.end()) {
-              std::unordered_map<std::string, std::vector<std::string>> tmp = {};
-              tmp["tl"] = std::vector<std::string>();
-              tmp["flr"] = std::vector<std::string>();
-              tmp["flw"] = std::vector<std::string>();
               others[d.user()] = tmp;
             }
-            auto u = others[d.user()];
-            appender(u["tl"],d.tl());
-            appender(u["flr"],d.flr());
-            appender(u["flw"],d.flw());
+            auto &otherClusterUser = others[d.user()];
+
+            std::vector<std::string> diff = appender(otherClusterUser["flr"], d.flr());
+            diff = appender(otherClusterUser["flw"],d.flw());
+            for (auto &currentUserBeingFollowed : diff) {
+              if (find(myusers.begin(),myusers.end(), currentUserBeingFollowed) != myusers.end()) {
+                std::ofstream oflr("./master_"+std::to_string(synchID)+"_"+currentUserBeingFollowed+"_followers.txt", std::ios::app);
+                oflr << d.user() << "\n";
+                oflr.close();
+              }
+            }
+            diff = appender(otherClusterUser["tl"],d.tl());
+            // all current users following otherClusterUser, update their timeline
+            // update the timeline messages for all followers of this user
+            // same for follower & following
+            std::vector<std::string> &vec = otherClusterUser["flr"];
+            for (auto &otherflr : vec) {
+              for (auto &msg : diff) {  
+                if (find(myusers.begin(), myusers.end(), otherflr) != myusers.end()) {
+                  std::ofstream timeline("./master_"+std::to_string(synchID)+"_"+otherflr+"_timeline.txt", std::ios::app);
+                  timeline << msg << "\n";
+                  timeline.close();
+                }
+              }
+            }
           }
         }
-
-        for (auto pair : others) { // string, UserTLFL
-          std::cout << " OTHER_USER= " << pair.first  << "\n";
-          std::cout << "TIMELINE: \n";
-          for (auto tl : pair.second["tl"]){
-            std::cout << "\t" << tl << "\n";
-          }
-          std::cout << "\n FOLLOWERS: \n";
-          for (auto flr : pair.second["flr"])
-            std::cout << "\t" << flr << "\n";
-          std::cout << " FOLLOW: \n"; 
-          for (auto flw : pair.second["flw"])
-            std::cout << "\t" << flw << "\n"; 
-        }
-
       sleep(20);
     }
     return ;
 }
 
-void appender(std::vector<std::string> &v, const google::protobuf::RepeatedPtrField<std::string>& data) {
+std::vector<std::string> appender(std::vector<std::string> &v, const google::protobuf::RepeatedPtrField<std::string>& data) {
+  std::vector<std::string> diff = {};
+  // std::cout << " data.size: " << data.size() << " v.size: " << v.size() << " diff= " << data.size()-v.size() << "\n";
   for (auto d : data) {
-    if (find(v.begin(), v.end(), d) == v.end())
+    if (find(v.begin(), v.end(), d) == v.end()) {
+      // std::cout << "\t\t\tAdding\n";
       v.push_back(d);
+      diff.push_back(d);
+    }
   }
+  return diff;
 }
+
 std::vector<std::string> get_lines_from_file(std::string filename, bool skip=false) {
-  std::cout << " opening: " << filename << "\n";
+  // std::cout << " opening: " << filename << "\n";
   std::vector<std::string> users;
   std::string user;
   std::ifstream file; 
@@ -342,5 +344,4 @@ std::vector<std::string> get_tl_or_fl(int synchID, std::string clientID, std::st
     }else{
         return s;
     }
-
 }
