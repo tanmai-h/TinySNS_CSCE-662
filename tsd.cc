@@ -297,7 +297,7 @@ class SNSServiceImpl final : public SNSService::Service {
         }
         Message new_msg; 
  	      //Send the newest messages to the client to be displayed
- 	      if(newest_twenty.size() >= 40){ 	
+ 	      if(newest_twenty.size() >= 40) {
           for(int i = newest_twenty.size()-40; i<newest_twenty.size(); i+=2){
             new_msg.set_msg(newest_twenty[i]);
             stream->Write(new_msg);

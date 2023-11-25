@@ -65,9 +65,7 @@ bool file_exists(const std::string& filename) {
 
 class SynchServiceImpl final : public SynchService::Service {
     Status GetUserTLFL(ServerContext * context, const ID * id, AllData * alldata) override {
-        std::cout << " REQ for GetUserTLFL from synchID=" << id->id() << "\n";
-        std::string fcurr = "./"+std::string("master_")+std::to_string(synchID)+"_currentusers.txt";
-        std::vector<std::string> current_users = get_lines_from_file(fcurr,false);
+        std::vector<std::string> current_users = get_lines_from_file("./master_"+std::to_string(synchID)+"_currentusers.txt",false);
         for(auto s:current_users) {
             UserTLFL usertlfl;
             usertlfl.set_user(s);
@@ -189,13 +187,16 @@ void run_synchronizer(std::string coordIP, std::string coordPort, std::string po
 
     while(true) {
         AllData all;
-        std::vector<std::string> myusers = get_all_users_func(synchID);
+        std::vector<std::string> myusers = get_lines_from_file("./master_"+std::to_string(synchID)+"_currentusers.txt",false);
+        std::vector<std::string> allusers = get_lines_from_file("./master_"+std::to_string(synchID)+"_allusers.txt",false);
         for (auto & stub : syncstubs) {
           ClientContext ctx;
-          std::cout << " calling using the stub " << "\n";
           stub->GetUserTLFL(&ctx, id, &all);
           for(const UserTLFL &d : all.data()) {
             std::cout << "\t\tgot data from " << d.user() << "\n";
+            if (find(allusers.begin(),allusers.end(),d.user()) == allusers.end()) {
+              allusers.push_back(d.user());
+            }
             std::unordered_map<std::string, std::vector<std::string>> tmp = {};
             tmp["tl"] = std::vector<std::string>();
             tmp["flr"] = std::vector<std::string>();
@@ -204,12 +205,14 @@ void run_synchronizer(std::string coordIP, std::string coordPort, std::string po
               others[d.user()] = tmp;
             }
             auto &otherClusterUser = others[d.user()];
-
             std::vector<std::string> diff = appender(otherClusterUser["flr"], d.flr());
             diff = appender(otherClusterUser["flw"],d.flw());
             for (auto &currentUserBeingFollowed : diff) {
+              std::cout << " need to update: " << currentUserBeingFollowed << "\n";
               if (find(myusers.begin(),myusers.end(), currentUserBeingFollowed) != myusers.end()) {
-                std::ofstream oflr("./master_"+std::to_string(synchID)+"_"+currentUserBeingFollowed+"_followers.txt", std::ios::app);
+                std::string fname ="./master_"+std::to_string(synchID)+"_"+currentUserBeingFollowed+"_follower.txt";
+                std::cout << " appeding " << d.user() << " to  " << fname << "\n";
+                std::ofstream oflr(fname, std::ios::app);
                 oflr << d.user() << "\n";
                 oflr.close();
               }
@@ -219,17 +222,26 @@ void run_synchronizer(std::string coordIP, std::string coordPort, std::string po
             // update the timeline messages for all followers of this user
             // same for follower & following
             std::vector<std::string> &vec = otherClusterUser["flr"];
-            for (auto &otherflr : vec) {
-              for (auto &msg : diff) {  
-                if (find(myusers.begin(), myusers.end(), otherflr) != myusers.end()) {
-                  std::ofstream timeline("./master_"+std::to_string(synchID)+"_"+otherflr+"_timeline.txt", std::ios::app);
-                  timeline << msg << "\n";
+            for (auto currentuser : myusers) {
+              std::cout << " for user " << currentuser << "\n";
+              for (auto &msg : diff) {
+                std::cout << " checking for msg: " << msg << "\n";
+                if (find(vec.begin(), vec.end(), currentuser) != vec.end()) {
+                  std::string tfile = "./master_"+std::to_string(synchID)+"_"+currentuser+"_timeline.txt";
+                  std::cout << "\tAPPENDING_TO= " << tfile << "\n";
+                  std::ofstream timeline(tfile, std::ios::app);
+                  timeline << msg+"\n" << "\n";
                   timeline.close();
                 }
               }
             }
           }
         }
+      std::ofstream allwrite("./master_"+std::to_string(synchID)+"_allusers.txt", std::ios::out);
+      for (auto &al : allusers) {
+        allwrite << al << "\n";
+      }
+      allwrite.close();
       sleep(20);
     }
     return ;
@@ -237,10 +249,8 @@ void run_synchronizer(std::string coordIP, std::string coordPort, std::string po
 
 std::vector<std::string> appender(std::vector<std::string> &v, const google::protobuf::RepeatedPtrField<std::string>& data) {
   std::vector<std::string> diff = {};
-  // std::cout << " data.size: " << data.size() << " v.size: " << v.size() << " diff= " << data.size()-v.size() << "\n";
   for (auto d : data) {
     if (find(v.begin(), v.end(), d) == v.end()) {
-      // std::cout << "\t\t\tAdding\n";
       v.push_back(d);
       diff.push_back(d);
     }
