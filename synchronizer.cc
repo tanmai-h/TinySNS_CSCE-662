@@ -273,7 +273,6 @@ std::vector<std::string> get_lines_from_file(std::string filename, bool skip=fal
   int i = 0;
   while(file){
     getline(file,user);
-
     if(!user.empty() && (!skip || i %2 == 0))
       users.push_back(user);
     i += 1;

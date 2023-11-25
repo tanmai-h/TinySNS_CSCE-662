@@ -87,6 +87,7 @@ std::vector<Client*> client_db;
 std::shared_ptr<CoordService::Stub> channel;
 ServerInfo serverInfo;
 std::unordered_set<std::string> current_users = {};
+std::unordered_map<std::string, std::vector<std::string>> user_timeline = {};
 
 std::vector<std::string> get_lines_from_file(std::string filename) {
   std::vector<std::string> users;
@@ -110,7 +111,7 @@ std::vector<std::string> get_lines_from_file(std::string filename) {
 }
 
 //Helper function used to find a Client object given its username
-int find_user(std::string username){
+int find_user(std::string username){ 
   int index = 0;
   for(Client* c : client_db){
     if(c->username == username)
@@ -175,7 +176,7 @@ class SNSServiceImpl final : public SNSService::Service {
   Status List(ServerContext* context, const Request* request, ListReply* list_reply) override {
     log(INFO,"Serving List Request from: " + request->username()  + "\n");
     std::cout << " Serving List Request from: " << request->username() << "\n";
-    std::ifstream in(getfilename(), std::ios::in | std::ios::out);
+    std::ifstream in(getfilename("all"), std::ios::in | std::ios::out);
     std::string user;
     while(getline(in,user)) {
       list_reply->add_all_users(user);
@@ -382,6 +383,31 @@ void sendHeartbeatThread(HeartbeatClient& client) {
    }
 }
 
+void updateTimelineStream() {
+  while (true) {
+    for (auto &c : get_lines_from_file(getfilename("current"))) {
+      std::vector<std::string> tl = get_lines_from_file(getfilename(c) + "_timeline.txt");
+      std::vector<std::string> msg = {};
+      if (user_timeline.find(c) == user_timeline.end())
+        user_timeline[c] = {};
+      for (int i = 0; i < tl.size(); i+=2) {
+        auto msg = tl[i];
+        if (find(user_timeline[c].begin(), user_timeline[c].end(), msg) == user_timeline[c].end()) {
+          user_timeline[c].push_back(tl[i]);
+          int idx = find_user(c);
+          if (idx >= 0) {
+            if(client_db[idx]->stream) {
+              Message new_msg; new_msg.set_msg(msg);
+              client_db[idx]->stream->Write(new_msg);
+            }
+          }
+        }
+      }
+    }
+    sleep(15);
+  }
+}
+
 class ServerProvider {
 public:
     // Constructor with parameters to initialize member variables
@@ -413,7 +439,7 @@ private:
     std::string coordinatorIP;
     std::string coordinatorPort;
     HeartbeatClient hc;
-    std::thread ht;
+    std::thread ht, timelineThread;
   
     int connectToCoordinator() {
       try {
@@ -425,6 +451,7 @@ private:
         std::string coordLoginInfo = coordinatorIP + ":" + coordinatorPort;
         hc = HeartbeatClient(coordLoginInfo, serverInfo);
         ht = std::thread(sendHeartbeatThread, std::ref(hc));
+        timelineThread = std::thread(updateTimelineStream);
         return 0;
       } catch (const std::exception& e) {
           log(ERROR, "Exception in connectToCoordinator: " + std::string(e.what()));
