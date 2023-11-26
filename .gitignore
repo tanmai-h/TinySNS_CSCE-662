@@ -1,5 +1,8 @@
 bak
-.txt
+*.txt
+*.grpc.pb.cc
+*.grpc.pb.h
+*.grpc.pb.o
 
 # C/C++ build outputs
 .build/

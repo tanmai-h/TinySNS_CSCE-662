@@ -159,7 +159,7 @@ void copier(){
       current_users.insert(tmp);
     }
     source.close();
-    fnames = {"_timeline.txt", "_follower.txt", "_following.txt"};
+    fnames = {"_timeline.txt", "_follower.txt", "_following.txt", ".txt"};
     for (auto s : cusers) {
       std::string base = getfilename(s,true);
       std::string dbase = getfilename(s);
@@ -285,6 +285,7 @@ class SNSServiceImpl final : public SNSService::Service {
       //"Set Stream" is the default message from the client to initialize the stream
       if(message.msg() != "Set Stream") {
         user_file << fileinput;
+        user_file.close();
       }
       //If message = "Set Stream", print the first 20 chats from the people you follow
       else {
@@ -319,7 +320,7 @@ class SNSServiceImpl final : public SNSService::Service {
         int idx = find_user(follower);
         if (idx >= 0) {
           Client * temp_client =  client_db[idx];
-          if(temp_client->connected) 
+          if(temp_client->stream) 
                 temp_client->stream->Write(message);
           std::string temp_username = temp_client->username;
           if (isincurrent(temp_username)) {
