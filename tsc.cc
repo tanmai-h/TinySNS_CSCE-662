@@ -25,6 +25,11 @@ using csce438::ServerInfo;
 using csce438::Confirmation;
 using csce438::ID;
 
+void displayReConnectionMessage(const std::string& host, const std::string & port) {
+  std::cout << "Reconnecting to " << host << ":" << port << "..." << std::endl;
+}
+
+
 Message MakeMessage(const std::string& username, const std::string& msg) {
     Message m;
     m.set_username(username);
@@ -43,6 +48,13 @@ public:
 	 const std::string& p)
     :cip(hname), uid(uname), cport(p) {}
 
+  void setcip(std::string &hname) {
+    this->cip = hname;
+  }
+
+  void setport(std::string &hport) {
+    this->cport;
+  }
   
 protected:
   virtual int connectTo();
@@ -83,7 +95,7 @@ int Client::connectTo() {
     }
 
     login_info = serverInfo.hostname() + ":" + serverInfo.port();
-
+    displayReConnectionMessage(serverInfo.hostname(), serverInfo.port());
     stub_ = std::unique_ptr<SNSService::Stub>(SNSService::NewStub(
         grpc::CreateChannel(
         login_info, grpc::InsecureChannelCredentials())));
@@ -182,7 +194,7 @@ IReply Client::List() {
     }
     return ire;
 }
-        
+
 IReply Client::Follow(const std::string& username2) {
     Request request;
     request.set_username(uid);
@@ -285,6 +297,7 @@ void Client::Timeline(const std::string& username) {
   reader.join();
 }
 
+
 int main(int argc, char** argv) {
 
   std::string cip = "127.0.0.1";
@@ -300,7 +313,7 @@ int main(int argc, char** argv) {
       cport = optarg;break;
     case 'u':
       uid = optarg;break;
-    default:
+    default: 
       std::cout << "Invalid Command Line Argument\n";
     }
   }

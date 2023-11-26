@@ -81,7 +81,7 @@ struct Client {
     return (username == c1.username);
   }
 };
-
+ 
 //Vector that stores every client that has been created
 std::vector<Client*> client_db;
 std::shared_ptr<CoordService::Stub> channel;
@@ -276,18 +276,18 @@ class SNSServiceImpl final : public SNSService::Service {
       std::string username = message.username();
       int user_index = find_user(username);
       c = client_db[user_index];
+      c->stream = stream;
       std::string filename = getfilename(username) + ".txt";
       std::ofstream user_file(filename, std::ios::app|std::ios::out|std::ios::in);
       google::protobuf::Timestamp temptime = message.timestamp();
       std::string time = google::protobuf::util::TimeUtil::ToString(temptime);
-      std::string fileinput = time+" :: "+message.username()+":"+message.msg()+"\n";
+      std::string fileinput = message.username() + std::string(" (") + time + std::string(") >> ") + message.msg() + "\n";
       //"Set Stream" is the default message from the client to initialize the stream
       if(message.msg() != "Set Stream") {
         user_file << fileinput;
       }
       //If message = "Set Stream", print the first 20 chats from the people you follow
       else {
-      	c->stream = stream;
         std::string line;
         std::vector<std::string> newest_twenty;
         std::ifstream in(getfilename(username)+"_timeline.txt");
@@ -386,18 +386,26 @@ void sendHeartbeatThread(HeartbeatClient& client) {
 void updateTimelineStream() {
   while (true) {
     for (auto &c : get_lines_from_file(getfilename("current"))) {
-      std::vector<std::string> tl = get_lines_from_file(getfilename(c) + "_timeline.txt");
+      std::ifstream ifs((getfilename(c) + "_timeline.txt"), std::ios::in);
+      std::string tmp;
+      std::vector<std::string> tl;
+      while (getline(ifs, tmp))
+        tl.push_back(tmp);
+      ifs.close();
+
       std::vector<std::string> msg = {};
       if (user_timeline.find(c) == user_timeline.end())
         user_timeline[c] = {};
       for (int i = 0; i < tl.size(); i+=2) {
         auto msg = tl[i];
+        std:: cout << " USER= " << c << " CHECKING_FOR_UPDATE= " << msg << "\n";
         if (find(user_timeline[c].begin(), user_timeline[c].end(), msg) == user_timeline[c].end()) {
           user_timeline[c].push_back(tl[i]);
           int idx = find_user(c);
           if (idx >= 0) {
             if(client_db[idx]->stream) {
-              Message new_msg; new_msg.set_msg(msg);
+              Message new_msg;
+                new_msg.set_msg(msg);
               client_db[idx]->stream->Write(new_msg);
             }
           }
@@ -431,6 +439,8 @@ public:
     ~ServerProvider() {
       if(ht.joinable())
           ht.join();
+      if (timelineThread.joinable())
+        timelineThread.join();
     }
 private:
     std::string port;

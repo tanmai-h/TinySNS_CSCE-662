@@ -1,5 +1,6 @@
 #include "client.h"
 
+bool canRetry = true;
 
 void IClient::run()
 {
@@ -11,6 +12,7 @@ void IClient::run()
   displayTitle();
   while (1) {
     std::string cmd = getCommand();
+    
     IReply reply = processCommand(cmd);
     displayCommandReply(cmd, reply);
     if (reply.grpc_status.ok() && reply.comm_status == SUCCESS
@@ -131,9 +133,5 @@ void displayPostMessage(const std::string& sender, const std::string& message, s
 {
   std::string t_str(std::ctime(&time));
   t_str[t_str.size()-1] = '\0';
-  std::cout << sender << " (" << t_str << ") >> " << message << std::endl;
-}
-
-void displayReConnectionMessage(const std::string& host, const std::string & port) {
-  std::cout << "Reconnecting to " << host << ":" << port << "..." << std::endl;
+  std::cout << message << std::endl;
 }
