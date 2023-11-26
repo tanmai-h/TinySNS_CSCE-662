@@ -88,7 +88,6 @@ std::shared_ptr<CoordService::Stub> channel;
 ServerInfo serverInfo;
 std::unordered_set<std::string> current_users = {};
 std::unordered_map<std::string, std::vector<std::string>> user_timeline = {};
-
 std::vector<std::string> get_lines_from_file(std::string filename) {
   std::vector<std::string> users;
   std::string user;
@@ -122,8 +121,8 @@ int find_user(std::string username){
 }
 
 bool isincurrent(std::string username) {
-      int cluster = ((atoi(username.c_str()))-1)%3+1;
-    return std::to_string(cluster) == ::serverInfo.clusterid();
+  int cluster = ((atoi(username.c_str()))-1)%3+1;
+  return std::to_string(cluster) == ::serverInfo.clusterid();
 
 }
 
@@ -242,6 +241,7 @@ class SNSServiceImpl final : public SNSService::Service {
       for (auto c : current_users) {
         std::cout << " prev current " << c << "\n";
       }
+      c->stream = nullptr;
       if(current_users.find(username) == current_users.end()) {
           std::ofstream current(getfilename("current"),std::ios::app|std::ios::out|std::ios::in);
           current << username << "\n";
@@ -254,6 +254,7 @@ class SNSServiceImpl final : public SNSService::Service {
     } else {
       Client *user = client_db[user_index];
       current_users.insert(user->username);
+      user->stream = nullptr;
       if(user->connected) {
         log(WARNING, "User already logged on");
         std::string msg = "Welcome Back " + user->username;
@@ -280,8 +281,11 @@ class SNSServiceImpl final : public SNSService::Service {
       std::string filename = getfilename(username) + ".txt";
       std::ofstream user_file(filename, std::ios::app|std::ios::out|std::ios::in);
       google::protobuf::Timestamp temptime = message.timestamp();
-      std::string time = google::protobuf::util::TimeUtil::ToString(temptime);
-      std::string fileinput = message.username() + std::string(" (") + time + std::string(") >> ") + message.msg() + "\n";
+      // std::string time = google::protobuf::util::TimeUtil::ToString(temptime);
+      std::time_t time = temptime.seconds();
+      std::string tstr = std::ctime(&time);
+      tstr.pop_back();
+      std::string fileinput = message.username() + std::string(" (") + tstr + std::string(") >> ") + message.msg() + "\n";
       //"Set Stream" is the default message from the client to initialize the stream
       if(message.msg() != "Set Stream") {
         user_file << fileinput;
@@ -320,8 +324,11 @@ class SNSServiceImpl final : public SNSService::Service {
         int idx = find_user(follower);
         if (idx >= 0) {
           Client * temp_client =  client_db[idx];
-          if(temp_client->stream) 
-                temp_client->stream->Write(message);
+          if(temp_client->stream) {
+            Message new_msg;
+            new_msg.set_msg(fileinput);
+            temp_client->stream->Write(new_msg);
+          }
           std::string temp_username = temp_client->username;
           if (isincurrent(temp_username)) {
               std::string temp_file = getfilename(temp_username) + "_timeline.txt";
@@ -386,7 +393,8 @@ void sendHeartbeatThread(HeartbeatClient& client) {
 
 void updateTimelineStream() {
   while (true) {
-    for (auto &c : get_lines_from_file(getfilename("current"))) {
+    std::vector<std::string> current_user_list = get_lines_from_file(getfilename("current"));
+    for (auto &c : current_user_list) {
       std::ifstream ifs((getfilename(c) + "_timeline.txt"), std::ios::in);
       std::string tmp;
       std::vector<std::string> tl;
@@ -398,16 +406,28 @@ void updateTimelineStream() {
       if (user_timeline.find(c) == user_timeline.end())
         user_timeline[c] = {};
       for (int i = 0; i < tl.size(); i+=2) {
-        auto msg = tl[i];
+        std::string msg = tl[i];
         std:: cout << " USER= " << c << " CHECKING_FOR_UPDATE= " << msg << "\n";
-        if (find(user_timeline[c].begin(), user_timeline[c].end(), msg) == user_timeline[c].end()) {
+        std::string name = msg.substr(0, 1);
+        if ((find(user_timeline[c].begin(), user_timeline[c].end(), msg) == user_timeline[c].end()) &&
+            find(current_user_list.begin(), current_user_list.end(), name) == current_user_list.end()
+            ) {
+          std::cout << "\t" << " NEED TO SEND";          
           user_timeline[c].push_back(tl[i]);
           int idx = find_user(c);
           if (idx >= 0) {
-            if(client_db[idx]->stream) {
-              Message new_msg;
+            std::cout << " - sending to user=" << c << "\n";
+            if(client_db[idx]->connected && client_db[idx]->stream) {
+              std::cout << "\t\t" << " Stream Active\n";
+              try {
+                Message new_msg;
                 new_msg.set_msg(msg);
-              client_db[idx]->stream->Write(new_msg);
+                Client *tmp = client_db[idx];
+                ServerReaderWriter<Message, Message>* tt = client_db[idx]->stream;
+                client_db[idx]->stream->Write(new_msg);
+              } catch(...) {
+                std::cout << "Error in Write\n";
+              }
             }
           }
         }
@@ -492,6 +512,7 @@ int main(int argc, char** argv) {
   std::string coordinatorIP = "127.0.0.1";
   std::string coordinatorPort = "9090";
   int opt = 0;
+
   while ((opt = getopt(argc, argv, "c:s:h:k:p:")) != -1){
     switch(opt) {
       case 'c':
