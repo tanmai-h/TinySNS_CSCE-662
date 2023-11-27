@@ -19,14 +19,14 @@ To run coordinator, server, synchronizers, client (Run on different terminals)
 ## Coordinator
 ./coordinator -p 9090
 ## Cluster 1 Servers
-./tsd -p 20000 -k 9090 -c 1 -s 1
-./tsd -p 20001 -k 9090 -c 1 -s 2
+./tsd -p 10000 -k 9090 -c 1 -s 1
+./tsd -p 10001 -k 9090 -c 1 -s 2
 ## Cluster 2 Servers
-./tsd -p 20002 -k 9090 -c 2 -s 1
-./tsd -p 20003 -k 9090 -c 2 -s 2
+./tsd -p 20000 -k 9090 -c 2 -s 1
+./tsd -p 20001 -k 9090 -c 2 -s 2
 ## Cluster 3 Servers
-./tsd -p 20004 -k 9090 -c 3 -s 1
-./tsd -p 20005 -k 9090 -c 3 -s 2
+./tsd -p 30000 -k 9090 -c 3 -s 1
+./tsd -p 30001 -k 9090 -c 3 -s 2
 
 ## Synchronizers
 ./synchronizer -n 1 -j 9090 -p 1234
@@ -44,7 +44,7 @@ bash tsn-service_start.sh
 ```
 1. Wait 60s
 2. Start the clients for the test cases
-3. After test case 1, in another terminal run “make reset”
+3. After test case 1, in another terminal run `make reset`
 4. Start the clients for test case 2
 5. To kill the master server in cluster 2
 ```
