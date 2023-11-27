@@ -56,7 +56,7 @@ synchronizer: coordinator.pb.o coordinator.grpc.pb.o sns.pb.o sns.grpc.pb.o sync
 clean:
 	rm -f *.txt *.o *.pb.cc *.pb.h tsc tsd coordinator synchronizer
 
-clear:
+reset:
 	rm -f *.txt
 
 # The following is to test your system and ensure a smoother experience.

@@ -5,23 +5,50 @@ Compile the code using the provided makefile:
 
     make
 
-To clear the directory (and remove .txt files):
+To clear all genereated and compiled files in the directory:
    
     make clean
 
+To clear all .txt files (follower info, timelines, etc)
 
-To run coordinator, server, client (Run them on different terminals)
+    make reset
+
+### For Test Cases
+To run coordinator, server, synchronizers, client (Run on different terminals)
 ```bash
+## Coordinator
 ./coordinator -p 9090
- ./tsd -c 1 -s 1 -h localhost -k 9090 -p 10000
-./tsd  -c 2 -s 1 -h localhost -k 9090 -p 10001
-./tsc -h localhost -k 9090 -u 1
-./tsc -h localhost -k 9090 -u 2
+## Cluster 1 Servers
+./tsd -p 20000 -k 9090 -c 1 -s 1
+./tsd -p 20001 -k 9090 -c 1 -s 2
+## Cluster 2 Servers
+./tsd -p 20002 -k 9090 -c 2 -s 1
+./tsd -p 20003 -k 9090 -c 2 -s 2
+## Cluster 3 Servers
+./tsd -p 20004 -k 9090 -c 3 -s 1
+./tsd -p 20005 -k 9090 -c 3 -s 2
+
+## Synchronizers
+./synchronizer -n 1 -j 9090 -p 1234
+./synchronizer -n 2 -j 9090 -p 1235
+./synchronizer -n 3 -j 9090 -p 1236
 ```
+
+### NOTE
+* After Test Case 1 (sanity check), run `make reset`
+
 ### Using the startup script
 ```bash
+make
 bash tsn-service_start.sh
-// Now on separate terminals start the client
-./tsc -h localhost -k 9090 -u 1
-./tsc -h localhost -k 9090 -u 2
+## Wait 60s
+## Start the clients for the test cases
+## After test case 1, in another terminal run “make reset”
+## Start the clients for test case 2
+## To kill the master server in cluster 2
+ps aux | grep “-c 2 -s 1”  # see the process id
+#kill the master server process by typing 
+kill -9 processId
+
+# ctrl+c to kill the clients when required.
 ```

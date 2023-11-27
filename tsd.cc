@@ -367,7 +367,6 @@ public:
       }
       serverInfo_.set_type(confirmation.type());
       ::serverInfo.set_type(confirmation.type());
-      std::cout << "Recevied confirmation for heartbeat, now type= " << confirmation.type() << "\n";
       log(INFO, "Got confirmation from cooridinator  now type=" + confirmation.type());
   }
 
@@ -407,18 +406,14 @@ void updateTimelineStream() {
         user_timeline[c] = {};
       for (int i = 0; i < tl.size(); i+=2) {
         std::string msg = tl[i];
-        std:: cout << " USER= " << c << " CHECKING_FOR_UPDATE= " << msg << "\n";
         std::string name = msg.substr(0, 1);
         if ((find(user_timeline[c].begin(), user_timeline[c].end(), msg) == user_timeline[c].end()) &&
             find(current_user_list.begin(), current_user_list.end(), name) == current_user_list.end()
             ) {
-          std::cout << "\t" << " NEED TO SEND";          
           user_timeline[c].push_back(tl[i]);
           int idx = find_user(c);
           if (idx >= 0) {
-            std::cout << " - sending to user=" << c << "\n";
             if(client_db[idx]->connected && client_db[idx]->stream) {
-              std::cout << "\t\t" << " Stream Active\n";
               try {
                 Message new_msg;
                 new_msg.set_msg(msg);
@@ -451,7 +446,6 @@ public:
               current = get_lines_from_file(getfilename("current"))
         ;
         for (auto s : current) {
-          std::cout << " adding  - " << s << "\n";
           current_users.insert(s);
         }
         RunServer();
@@ -498,7 +492,6 @@ private:
         builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
         builder.RegisterService(&service);
         std::unique_ptr<Server> server(builder.BuildAndStart());
-        std::cout << "Server listening on " << server_address << std::endl;
         log(INFO, "Server listening on: " + server_address);
 
         server->Wait();

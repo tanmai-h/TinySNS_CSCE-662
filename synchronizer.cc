@@ -65,10 +65,11 @@ bool file_exists(const std::string& filename) {
 
 class SynchServiceImpl final : public SynchService::Service {
     Status GetUserTLFL(ServerContext * context, const ID * id, AllData * alldata) override {
+        log(INFO, " Serving REQ for GetUserTLFL");
         std::vector<std::string> current_users = get_lines_from_file("./master_"+std::to_string(synchID)+"_currentusers.txt",false);
         for(auto s:current_users) {
             UserTLFL usertlfl;
-            usertlfl.set_user(s);
+            usertlfl.set_user(s); 
             std::vector<std::string> tl  = get_tl_or_fl(synchID, s, "tl");
             std::vector<std::string> flw = get_tl_or_fl(synchID, s, "flw");
             std::vector<std::string> flr = get_tl_or_fl(synchID, s, "flr");
@@ -158,16 +159,13 @@ void run_synchronizer(std::string coordIP, std::string coordPort, std::string po
       log(INFO, "Coord down");
       exit(-1);
     }
-    std::cout << " conf: " << confirmation.type() << " " << confirmation.status() << "\n";
+    log(INFO, " Registered with coord " + confirmation.status());
     AllSyncServers allsyncservers;
     sleep(10);
 
     try {
       ClientContext cc;
       coord_stub_->GetSyncServers(&cc, empty, &allsyncservers);
-      for (auto s : allsyncservers.servers()) {
-        std::cout << " reg " << s.hostname() << " - " << s.port() << " - " << s.type() << " - " << s.clusterid() << "\n";
-      }
     } catch(...) {
         std::exception_ptr p = std::current_exception();
         std::cout <<(p ? p.__cxa_exception_type()->name() : "null") << std::endl;
@@ -176,8 +174,6 @@ void run_synchronizer(std::string coordIP, std::string coordPort, std::string po
     std::vector<std::unique_ptr<SynchService::Stub>> syncstubs;
     for (const ServerInfo serverInfo : allsyncservers.servers()) {
       if (serverInfo.clusterid() != std::to_string(synchID)) {
-        std::cout << " made stub for: " << serverInfo.port() << " - " << serverInfo.clusterid() << "\n";
-        std::cout << "\ttarget_str=" << "127.0.0.1:" + serverInfo.port() << "\n";
         syncstubs.push_back(std::move(
           SynchService::NewStub(
               grpc::CreateChannel("127.0.0.1:" + serverInfo.port(), grpc::InsecureChannelCredentials())
@@ -193,7 +189,7 @@ void run_synchronizer(std::string coordIP, std::string coordPort, std::string po
           ClientContext ctx;
           stub->GetUserTLFL(&ctx, id, &all);
           for(const UserTLFL &d : all.data()) {
-            std::cout << "\t\tgot data from " << d.user() << "\n";
+            // std::cout << "\t\tgot data from " << d.user() << "\n";
             if (find(allusers.begin(),allusers.end(),d.user()) == allusers.end()) {
               allusers.push_back(d.user());
             }
@@ -207,11 +203,9 @@ void run_synchronizer(std::string coordIP, std::string coordPort, std::string po
             auto &otherClusterUser = others[d.user()];
             std::vector<std::string> diff = appender(otherClusterUser["flr"], d.flr());
             diff = appender(otherClusterUser["flw"],d.flw());
-            for (auto &currentUserBeingFollowed : diff) {
-              std::cout << " need to update: " << currentUserBeingFollowed << "\n";
+            for (auto &currentUserBeingFollowed : diff) {              
               if (find(myusers.begin(),myusers.end(), currentUserBeingFollowed) != myusers.end()) {
                 std::string fname ="./master_"+std::to_string(synchID)+"_"+currentUserBeingFollowed+"_follower.txt";
-                std::cout << " appeding " << d.user() << " to  " << fname << "\n";
                 std::ofstream oflr(fname, std::ios::app);
                 oflr << d.user() << "\n";
                 oflr.close();
@@ -223,12 +217,9 @@ void run_synchronizer(std::string coordIP, std::string coordPort, std::string po
             // same for follower & following
             std::vector<std::string> &vec = otherClusterUser["flr"];
             for (auto currentuser : myusers) {
-              std::cout << " for user " << currentuser << "\n";
               for (auto &msg : diff) {
-                std::cout << " checking for msg: " << msg << "\n";
                 if (find(vec.begin(), vec.end(), currentuser) != vec.end()) {
                   std::string tfile = "./master_"+std::to_string(synchID)+"_"+currentuser+"_timeline.txt";
-                  std::cout << "\tAPPENDING_TO= " << tfile << "\n";
                   std::ofstream timeline(tfile, std::ios::app);
                   timeline << msg+"\n" << "\n";
                   timeline.close();
