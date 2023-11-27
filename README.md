@@ -41,14 +41,17 @@ To run coordinator, server, synchronizers, client (Run on different terminals)
 ```bash
 make
 bash tsn-service_start.sh
-## Wait 60s
-## Start the clients for the test cases
-## After test case 1, in another terminal run “make reset”
-## Start the clients for test case 2
-## To kill the master server in cluster 2
-ps aux | grep “-c 2 -s 1”  # see the process id
-#kill the master server process by typing 
-kill -9 processId
-
-# ctrl+c to kill the clients when required.
 ```
+1. Wait 60s
+2. Start the clients for the test cases
+3. After test case 1, in another terminal run “make reset”
+4. Start the clients for test case 2
+5. To kill the master server in cluster 2
+```
+ps aux | grep “-c 2 -s 1”  # see the process id
+```
+6. kill the master server process by typing 
+```
+kill -9 processId
+```
+7. ctrl+c to kill the clients when required.
