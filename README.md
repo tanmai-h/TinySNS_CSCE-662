@@ -48,7 +48,7 @@ bash tsn-service_start.sh
 4. Start the clients for test case 2
 5. To kill the master server in cluster 2
 ```
-ps aux | grep “-c 2 -s 1”  # see the process id
+ps aux | grep “p 20000”  # see the process id
 ```
 6. kill the master server process by typing 
 ```
